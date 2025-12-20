@@ -17,6 +17,10 @@ EMAIL_PORT=587
 EMAIL_USER=afaysal220@gmail.com
 EMAIL_PASS=npzp eabo veuk tnlr
 EMAIL_FROM=afaysal220@gmail.com
+
+CLOUDINARY_CLOUD_NAME=ddty8zoxr
+CLOUDINARY_API_KEY=148938264955972
+CLOUDINARY_API_SECRET=cmMy7WcbWPsDjw9ms1UPAaPMK9Y
 ```
 
 Install and run:
@@ -36,6 +40,11 @@ npm start     # production
 - `POST /api/auth/forgot-password` — body: `{ email }`. Sends a 5-digit OTP to email if the account exists.
 - `POST /api/auth/verify-reset-otp` — body: `{ email, otp }`. Verifies reset OTP and returns a short-lived reset token.
 - `POST /api/auth/reset-password` — headers: `x-reset-token`, body: `{ newPassword, confirmPassword }`. Verifies reset token and updates password, returning new access+refresh tokens and user.
+
+## Profile Routes (Bearer auth required)
+
+- `POST /api/profile/complete` multipart/form-data: `profileImage` (file), fields `{ username, role, bio?, displayName?, instagramUrl?, tiktokUrl?, youtubeUrl?, facebookUrl?, spotifyArtistUrl? }`. Creates the user's profile.
+- `PATCH /api/profile/me` multipart/form-data: optional `profileImage` and any fields above to update profile.
 
 ## Notes
 

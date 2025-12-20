@@ -5,11 +5,13 @@ const connectDB = require('./config/db');
 dotenv.config();
 
 const authRoutes = require('./routes/authRoutes');
+const profileRoutes = require('./routes/profileRoutes');
 
 const app = express();
 app.use(express.json());
 
 app.use('/api/auth', authRoutes);
+app.use('/api/profile', profileRoutes);
 
 // Basic health check
 app.get('/health', (req, res) => {
