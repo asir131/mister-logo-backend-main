@@ -73,6 +73,17 @@ async function completeProfile(req, res) {
       youtubeUrl,
       facebookUrl,
       spotifyArtistUrl,
+      postsCount: 0,
+      followersCount: 0,
+      followingCount: 0,
+      imageCount: 0,
+      videoCount: 0,
+      audioCount: 0,
+      followers: [],
+      following: [],
+      imagePosts: [],
+      videoPosts: [],
+      audioPosts: [],
     });
 
     return res.status(201).json({
@@ -149,7 +160,24 @@ async function updateProfile(req, res) {
   }
 }
 
+async function getProfile(req, res) {
+  const { id: userId } = req.user;
+
+  try {
+    const profile = await Profile.findOne({ userId }).lean();
+    if (!profile) {
+      return res.status(404).json({ error: 'Profile not found.' });
+    }
+
+    return res.status(200).json({ profile });
+  } catch (err) {
+    console.error('Get profile error:', err);
+    return res.status(500).json({ error: 'Could not fetch profile.' });
+  }
+}
+
 module.exports = {
   completeProfile,
   updateProfile,
+  getProfile,
 };

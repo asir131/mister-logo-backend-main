@@ -22,6 +22,18 @@ function uploadImageBuffer(buffer, options = {}) {
   });
 }
 
+function uploadMediaBuffer(buffer, options = {}) {
+  const uploadOptions = { resource_type: 'auto', ...options };
+  return new Promise((resolve, reject) => {
+    const stream = cloudinary.uploader.upload_stream(uploadOptions, (error, result) => {
+      if (error) return reject(error);
+      return resolve(result);
+    });
+    stream.end(buffer);
+  });
+}
+
 module.exports = {
   uploadImageBuffer,
+  uploadMediaBuffer,
 };

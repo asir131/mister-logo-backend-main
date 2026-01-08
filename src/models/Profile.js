@@ -13,6 +13,48 @@ const profileSchema = new mongoose.Schema(
     youtubeUrl: { type: String },
     facebookUrl: { type: String },
     spotifyArtistUrl: { type: String },
+    postsCount: { type: Number, default: 0 },
+    followersCount: { type: Number, default: 0 },
+    followingCount: { type: Number, default: 0 },
+    imageCount: { type: Number, default: 0 },
+    videoCount: { type: Number, default: 0 },
+    audioCount: { type: Number, default: 0 },
+    followers: [
+      {
+        userId: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+        followedAt: { type: Date, default: Date.now },
+      },
+    ],
+    following: [
+      {
+        userId: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+        followedAt: { type: Date, default: Date.now },
+      },
+    ],
+    imagePosts: [
+      {
+        postId: { type: mongoose.Schema.Types.ObjectId, ref: 'Post' },
+        mediaUrl: { type: String },
+        description: { type: String },
+        createdAt: { type: Date },
+      },
+    ],
+    videoPosts: [
+      {
+        postId: { type: mongoose.Schema.Types.ObjectId, ref: 'Post' },
+        mediaUrl: { type: String },
+        description: { type: String },
+        createdAt: { type: Date },
+      },
+    ],
+    audioPosts: [
+      {
+        postId: { type: mongoose.Schema.Types.ObjectId, ref: 'Post' },
+        mediaUrl: { type: String },
+        description: { type: String },
+        createdAt: { type: Date },
+      },
+    ],
   },
   { timestamps: true },
 );

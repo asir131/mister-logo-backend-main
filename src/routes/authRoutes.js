@@ -1,5 +1,6 @@
 const express = require('express');
 const { body } = require('express-validator');
+const passport = require('passport');
 const {
   register,
   verifyOtp,
@@ -8,9 +9,18 @@ const {
   forgotPassword,
   verifyResetOtp,
   resetPassword,
+  facebookAuthSuccess,
 } = require('../controllers/authController');
+const { isFacebookConfigured } = require('../config/passport');
 
 const router = express.Router();
+
+function ensureFacebookConfigured(req, res, next) {
+  if (!isFacebookConfigured) {
+    return res.status(500).json({ error: 'Facebook auth is not configured.' });
+  }
+  return next();
+}
 
 router.post(
   '/register',
@@ -101,5 +111,24 @@ router.post(
   ],
   resetPassword,
 );
+
+router.get(
+  '/facebook',
+  ensureFacebookConfigured,
+  passport.authenticate('facebook', { scope: ['email'] }),
+);
+
+router.get('/facebook/callback', ensureFacebookConfigured, (req, res, next) => {
+  passport.authenticate('facebook', { session: false }, (err, user, info) => {
+    if (err) return next(err);
+    if (!user) {
+      return res
+        .status(401)
+        .json({ error: info?.message || 'Facebook login failed.' });
+    }
+    req.user = user;
+    return facebookAuthSuccess(req, res);
+  })(req, res, next);
+});
 
 module.exports = router;

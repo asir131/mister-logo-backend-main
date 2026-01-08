@@ -204,6 +204,10 @@ async function login(req, res) {
       return res.status(400).json({ error: 'Invalid credentials.' });
     }
 
+    if (!user.passwordHash) {
+      return res.status(400).json({ error: 'Invalid credentials.' });
+    }
+
     const passwordMatches = await bcrypt.compare(password, user.passwordHash);
     if (!passwordMatches) {
       return res.status(400).json({ error: 'Invalid credentials.' });
@@ -386,6 +390,26 @@ async function resetPassword(req, res) {
   }
 }
 
+async function facebookAuthSuccess(req, res) {
+  try {
+    const userDoc = req.user;
+    const userObj = userDoc?.toObject ? userDoc.toObject() : userDoc;
+
+    const token = issueToken(userObj);
+    const refreshToken = await issueRefreshToken(userObj._id || userObj.id);
+
+    return res.status(200).json({
+      message: 'Facebook login successful.',
+      user: sanitizeUser(userObj),
+      token,
+      refreshToken,
+    });
+  } catch (err) {
+    console.error('Facebook login error:', err);
+    return res.status(500).json({ error: 'Could not login with Facebook.' });
+  }
+}
+
 module.exports = {
   register,
   verifyOtp,
@@ -394,4 +418,5 @@ module.exports = {
   forgotPassword,
   verifyResetOtp,
   resetPassword,
+  facebookAuthSuccess,
 };

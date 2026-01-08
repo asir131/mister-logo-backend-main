@@ -3,7 +3,11 @@ const { body } = require('express-validator');
 const multer = require('multer');
 
 const authenticate = require('../middleware/auth');
-const { completeProfile, updateProfile } = require('../controllers/profileController');
+const {
+  completeProfile,
+  updateProfile,
+  getProfile,
+} = require('../controllers/profileController');
 
 const upload = multer({
   storage: multer.memoryStorage(),
@@ -43,6 +47,8 @@ router.post(
   ],
   completeProfile,
 );
+
+router.get('/me', authenticate, getProfile);
 
 router.patch(
   '/me',
