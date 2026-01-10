@@ -131,6 +131,25 @@ export default function FeedPage() {
     );
   }
 
+  async function handleToggleSave(post) {
+    if (!auth.token) return;
+    const isSaved = post.viewerHasSaved;
+    const result = await apiRequest({
+      path: isSaved ? `/api/saved-posts/${post._id}` : "/api/saved-posts",
+      method: isSaved ? "DELETE" : "POST",
+      body: isSaved ? null : { postId: post._id },
+      token: auth.token,
+    });
+    if (!result.ok) return;
+    setPosts((prev) =>
+      prev.map((item) =>
+        item._id === post._id
+          ? { ...item, viewerHasSaved: !isSaved }
+          : item,
+      ),
+    );
+  }
+
   async function handleLoadComments(post, page = 1) {
     if (!auth.token) return;
     setCommentsByPost((prev) => ({
@@ -233,6 +252,7 @@ export default function FeedPage() {
           currentUserId={auth.user?.id || auth.user?._id}
           onToggleFollow={handleToggleFollow}
           onToggleLike={handleToggleLike}
+          onToggleSave={handleToggleSave}
           commentsState={commentsByPost[post._id]}
           onLoadComments={handleLoadComments}
           onAddComment={handleAddComment}

@@ -21,6 +21,7 @@ export default function PostCard({
   currentUserId,
   onToggleFollow,
   onToggleLike,
+  onToggleSave,
   commentsState,
   onLoadComments,
   onAddComment,
@@ -88,10 +89,19 @@ export default function PostCard({
 
       <div className="post-actions">
         <button className="btn ghost" type="button" onClick={() => onToggleLike(post)}>
-          {post.viewerHasLiked ? "Unlike" : "Like"} · {post.likeCount}
+          {post.viewerHasLiked ? "Unlike" : "Like"} Aú {post.likeCount}
         </button>
+        {onToggleSave && (
+          <button
+            className="btn ghost"
+            type="button"
+            onClick={() => onToggleSave(post)}
+          >
+            {post.viewerHasSaved ? "Unsave" : "Save"}
+          </button>
+        )}
         <button className="btn ghost" type="button" onClick={() => onLoadComments(post)}>
-          Comments · {post.commentCount}
+          Comments Aú {post.commentCount}
         </button>
         <span className="post-time">{formatTime(post.createdAt)}</span>
       </div>

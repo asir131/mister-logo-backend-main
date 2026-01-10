@@ -4,6 +4,7 @@ const Post = require('../models/Post');
 const Profile = require('../models/Profile');
 const Like = require('../models/Like');
 const Comment = require('../models/Comment');
+const SavedPost = require('../models/SavedPost');
 const { uploadMediaBuffer } = require('../services/cloudinary');
 const { enqueuePostShare } = require('../services/shareQueue');
 
@@ -105,6 +106,7 @@ async function deletePost(req, res) {
   await Promise.all([
     Like.deleteMany({ postId: post._id }),
     Comment.deleteMany({ postId: post._id }),
+    SavedPost.deleteMany({ postId: post._id }),
   ]);
 
   await Profile.updateOne(

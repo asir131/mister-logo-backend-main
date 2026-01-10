@@ -15,6 +15,7 @@ const likeRoutes = require('./routes/likeRoutes');
 const commentRoutes = require('./routes/commentRoutes');
 const feedRoutes = require('./routes/feedRoutes');
 const userRoutes = require('./routes/userRoutes');
+const savedPostRoutes = require('./routes/savedPostRoutes');
 
 const app = express();
 app.use(
@@ -34,6 +35,7 @@ app.use('/api/likes', likeRoutes);
 app.use('/api/comments', commentRoutes);
 app.use('/api/feed', feedRoutes);
 app.use('/api/users', userRoutes);
+app.use('/api/saved-posts', savedPostRoutes);
 
 // Basic health check
 app.get('/health', (req, res) => {

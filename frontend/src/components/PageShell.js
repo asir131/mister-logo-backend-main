@@ -22,6 +22,9 @@ export default function PageShell({ title, subtitle, actions, children }) {
             <Link className="btn ghost" href="/feed">
               Feed
             </Link>
+            <Link className="btn ghost" href="/saved">
+              Saved
+            </Link>
             <Link className="btn ghost" href="/profile">
               Profile
             </Link>

@@ -94,6 +94,12 @@ npm start     # production
 
 - `GET /api/feed` query params: `page?`, `limit?` (default newest first). Returns posts with author, profile, like/comment counts, and viewer follow/like flags.
 
+## Saved Post Routes (Bearer auth required)
+
+- `POST /api/saved-posts` body: `{ postId }` save a post.
+- `DELETE /api/saved-posts/:postId` remove a saved post.
+- `GET /api/saved-posts` query params: `page?`, `limit?` (default newest saved first). Returns posts with author, profile, like/comment counts, and viewer follow/like/saved flags.
+
 ## Follow Routes (Bearer auth required)
 
 - `POST /api/follows` body: `{ userId }` follow a user.

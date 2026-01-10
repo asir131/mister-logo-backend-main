@@ -102,6 +102,26 @@ async function getFeed(req, res) {
         },
       },
       {
+        $lookup: {
+          from: 'savedposts',
+          let: { postId: '$_id', viewerId },
+          pipeline: [
+            {
+              $match: {
+                $expr: {
+                  $and: [
+                    { $eq: ['$postId', '$$postId'] },
+                    { $eq: ['$userId', '$$viewerId'] },
+                  ],
+                },
+              },
+            },
+            { $limit: 1 },
+          ],
+          as: 'viewerSaved',
+        },
+      },
+      {
         $addFields: {
           likeCount: {
             $ifNull: [{ $arrayElemAt: ['$likeCounts.count', 0] }, 0],
@@ -117,6 +137,7 @@ async function getFeed(req, res) {
               { $gt: [{ $size: '$viewerFollow' }, 0] },
             ],
           },
+          viewerHasSaved: { $gt: [{ $size: '$viewerSaved' }, 0] },
         },
       },
       {
@@ -129,6 +150,7 @@ async function getFeed(req, res) {
           commentCount: 1,
           viewerHasLiked: 1,
           viewerIsFollowing: 1,
+          viewerHasSaved: 1,
           author: {
             id: '$author._id',
             name: '$author.name',
