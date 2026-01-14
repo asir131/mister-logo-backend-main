@@ -1,0 +1,359 @@
+const mongoose = require('mongoose');
+
+const Follow = require('../models/Follow');
+const User = require('../models/User');
+const Profile = require('../models/Profile');
+const Conversation = require('../models/Conversation');
+const Message = require('../models/Message');
+const { uploadMediaBuffer } = require('../services/cloudinary');
+
+function parsePaging(value, fallback, max) {
+  const parsed = Number.parseInt(value, 10);
+  if (Number.isNaN(parsed) || parsed <= 0) return fallback;
+  if (max) return Math.min(parsed, max);
+  return parsed;
+}
+
+function makePairKey(a, b) {
+  const [first, second] = [a.toString(), b.toString()].sort();
+  return `${first}:${second}`;
+}
+
+async function getMutualFollowIds(userId) {
+  const following = await Follow.find({ followerId: userId })
+    .select('followingId')
+    .lean();
+  const followingIds = following.map((entry) => entry.followingId.toString());
+  if (!followingIds.length) return [];
+
+  const mutual = await Follow.find({
+    followerId: { $in: followingIds },
+    followingId: userId,
+  })
+    .select('followerId')
+    .lean();
+
+  return mutual.map((entry) => entry.followerId.toString());
+}
+
+async function ensureMutualFollow(userId, otherUserId) {
+  const [follows, followedBy] = await Promise.all([
+    Follow.exists({ followerId: userId, followingId: otherUserId }),
+    Follow.exists({ followerId: otherUserId, followingId: userId }),
+  ]);
+  return Boolean(follows && followedBy);
+}
+
+function pickName(user, profile) {
+  return (
+    profile?.displayName ||
+    profile?.username ||
+    user?.name ||
+    'Unknown User'
+  );
+}
+
+async function getChatList(req, res) {
+  const userId = req.user.id;
+  const mutualIds = await getMutualFollowIds(userId);
+
+  if (mutualIds.length === 0) {
+    return res.status(200).json({ chats: [] });
+  }
+
+  const [users, profiles] = await Promise.all([
+    User.find({ _id: { $in: mutualIds } })
+      .select('name')
+      .lean(),
+    Profile.find({ userId: { $in: mutualIds } })
+      .select('userId displayName username profileImageUrl')
+      .lean(),
+  ]);
+
+  const userById = new Map(users.map((user) => [user._id.toString(), user]));
+  const profileByUserId = new Map(
+    profiles.map((profile) => [profile.userId.toString(), profile]),
+  );
+
+  const pairKeys = mutualIds.map((id) => makePairKey(userId, id));
+  const conversations = await Conversation.find({ pairKey: { $in: pairKeys } }).lean();
+  const convoByKey = new Map(conversations.map((conv) => [conv.pairKey, conv]));
+
+  const convoIds = conversations.map((conv) => conv._id);
+  const unreadCounts = convoIds.length
+    ? await Message.aggregate([
+        {
+          $match: {
+            conversationId: { $in: convoIds },
+            recipientId: new mongoose.Types.ObjectId(userId),
+            readAt: null,
+          },
+        },
+        { $group: { _id: '$conversationId', count: { $sum: 1 } } },
+      ])
+    : [];
+
+  const unreadByConvo = new Map(
+    unreadCounts.map((item) => [item._id.toString(), item.count]),
+  );
+
+  const chats = mutualIds.map((otherId) => {
+    const user = userById.get(otherId);
+    const profile = profileByUserId.get(otherId);
+    const convo = convoByKey.get(makePairKey(userId, otherId));
+    const unreadCount = convo ? unreadByConvo.get(convo._id.toString()) || 0 : 0;
+
+    return {
+      userId: otherId,
+      name: pickName(user, profile),
+      profileImageUrl: profile?.profileImageUrl || null,
+      lastMessage: convo?.lastMessage || null,
+      unreadCount,
+      conversationId: convo?._id || null,
+      lastActivityAt: convo?.updatedAt || null,
+    };
+  });
+
+  chats.sort((a, b) => {
+    const aTime = a.lastActivityAt ? new Date(a.lastActivityAt).getTime() : 0;
+    const bTime = b.lastActivityAt ? new Date(b.lastActivityAt).getTime() : 0;
+    if (aTime !== bTime) return bTime - aTime;
+    return a.name.localeCompare(b.name);
+  });
+
+  return res.status(200).json({
+    chats: chats.map(({ lastActivityAt, ...rest }) => rest),
+  });
+}
+
+async function getConversation(req, res) {
+  const userId = req.user.id;
+  const { userId: otherUserId } = req.params;
+
+  if (!mongoose.isValidObjectId(otherUserId)) {
+    return res.status(400).json({ error: 'Invalid user id.' });
+  }
+
+  if (userId === otherUserId) {
+    return res.status(400).json({ error: 'Cannot chat with yourself.' });
+  }
+
+  const [otherUser, mutual] = await Promise.all([
+    User.findById(otherUserId).select('name').lean(),
+    ensureMutualFollow(userId, otherUserId),
+  ]);
+
+  if (!otherUser) {
+    return res.status(404).json({ error: 'User not found.' });
+  }
+
+  if (!mutual) {
+    return res.status(403).json({ error: 'Chat available only for mutual follows.' });
+  }
+
+  const profile = await Profile.findOne({ userId: otherUserId })
+    .select('userId displayName username profileImageUrl')
+    .lean();
+
+  const pairKey = makePairKey(userId, otherUserId);
+  const conversation = await Conversation.findOne({ pairKey }).lean();
+
+  if (!conversation) {
+    return res.status(200).json({
+      conversationId: null,
+      participant: {
+        userId: otherUserId,
+        name: pickName(otherUser, profile),
+        profileImageUrl: profile?.profileImageUrl || null,
+      },
+      messages: [],
+      page: 1,
+      totalPages: 1,
+      totalCount: 0,
+    });
+  }
+
+  const page = parsePaging(req.query.page, 1);
+  const limit = parsePaging(req.query.limit, 20, 50);
+  const skip = (page - 1) * limit;
+
+  const [totalCount, rawMessages] = await Promise.all([
+    Message.countDocuments({ conversationId: conversation._id }),
+    Message.find({ conversationId: conversation._id })
+      .sort({ createdAt: -1 })
+      .skip(skip)
+      .limit(limit)
+      .lean(),
+  ]);
+
+  await Message.updateMany(
+    {
+      conversationId: conversation._id,
+      recipientId: userId,
+      readAt: null,
+    },
+    { $set: { readAt: new Date() } },
+  );
+
+  const messages = rawMessages.reverse();
+  const totalPages = Math.max(1, Math.ceil(totalCount / limit));
+
+  return res.status(200).json({
+    conversationId: conversation._id,
+    participant: {
+      userId: otherUserId,
+      name: pickName(otherUser, profile),
+      profileImageUrl: profile?.profileImageUrl || null,
+    },
+    messages,
+    page,
+    totalPages,
+    totalCount,
+  });
+}
+
+function resolveMediaType(mime) {
+  if (!mime) return null;
+  const prefix = mime.split('/')[0];
+  if (['image', 'video', 'audio'].includes(prefix)) return prefix;
+  return 'file';
+}
+
+async function sendMessage(req, res) {
+  const userId = req.user.id;
+  const { userId: otherUserId } = req.params;
+  const text = typeof req.body?.text === 'string' ? req.body.text.trim() : '';
+  const file = req.file;
+
+  if (!mongoose.isValidObjectId(otherUserId)) {
+    return res.status(400).json({ error: 'Invalid user id.' });
+  }
+
+  if (userId === otherUserId) {
+    return res.status(400).json({ error: 'Cannot chat with yourself.' });
+  }
+
+  if (!text && !file) {
+    return res.status(400).json({ error: 'Message text or file is required.' });
+  }
+
+  const [otherUser, mutual] = await Promise.all([
+    User.findById(otherUserId).select('name').lean(),
+    ensureMutualFollow(userId, otherUserId),
+  ]);
+
+  if (!otherUser) {
+    return res.status(404).json({ error: 'User not found.' });
+  }
+
+  if (!mutual) {
+    return res.status(403).json({ error: 'Chat available only for mutual follows.' });
+  }
+
+  const pairKey = makePairKey(userId, otherUserId);
+  const conversation = await Conversation.findOneAndUpdate(
+    { pairKey },
+    {
+      $setOnInsert: {
+        pairKey,
+        participants: [userId, otherUserId],
+      },
+    },
+    { new: true, upsert: true },
+  );
+
+  let mediaUrl = null;
+  let mediaType = null;
+  let mediaMime = null;
+  let fileName = null;
+  let fileSize = null;
+
+  if (file) {
+    const uploadResult = await uploadMediaBuffer(file.buffer, {
+      folder: 'mister-logo/chat',
+      resource_type: 'auto',
+    });
+    mediaUrl = uploadResult.secure_url || uploadResult.url;
+    mediaMime = file.mimetype;
+    mediaType = resolveMediaType(file.mimetype);
+    fileName = file.originalname;
+    fileSize = file.size;
+  }
+
+  const message = await Message.create({
+    conversationId: conversation._id,
+    senderId: userId,
+    recipientId: otherUserId,
+    text,
+    mediaUrl,
+    mediaType,
+    mediaMime,
+    fileName,
+    fileSize,
+  });
+
+  const lastMessage = {
+    senderId: userId,
+    text,
+    mediaUrl,
+    mediaType,
+    createdAt: message.createdAt,
+  };
+
+  await Conversation.updateOne(
+    { _id: conversation._id },
+    { $set: { lastMessage }, $currentDate: { updatedAt: true } },
+  );
+
+  const io = req.app.get('io');
+  if (io) {
+    io.to(`user:${userId}`).emit('message:new', {
+      conversationId: conversation._id,
+      message,
+    });
+    io.to(`user:${otherUserId}`).emit('message:new', {
+      conversationId: conversation._id,
+      message,
+    });
+  }
+
+  return res.status(201).json({ message, conversationId: conversation._id });
+}
+
+async function markConversationRead(req, res) {
+  const userId = req.user.id;
+  const { userId: otherUserId } = req.params;
+
+  if (!mongoose.isValidObjectId(otherUserId)) {
+    return res.status(400).json({ error: 'Invalid user id.' });
+  }
+
+  const mutual = await ensureMutualFollow(userId, otherUserId);
+  if (!mutual) {
+    return res.status(403).json({ error: 'Chat available only for mutual follows.' });
+  }
+
+  const pairKey = makePairKey(userId, otherUserId);
+  const conversation = await Conversation.findOne({ pairKey }).lean();
+  if (!conversation) {
+    return res.status(200).json({ updated: 0 });
+  }
+
+  const result = await Message.updateMany(
+    {
+      conversationId: conversation._id,
+      recipientId: userId,
+      readAt: null,
+    },
+    { $set: { readAt: new Date() } },
+  );
+
+  return res.status(200).json({ updated: result.modifiedCount || 0 });
+}
+
+module.exports = {
+  getChatList,
+  getConversation,
+  sendMessage,
+  markConversationRead,
+};

@@ -116,6 +116,13 @@ npm start     # production
 - `GET /api/comments` query params: `postId`, `page?`, `limit?` paginate comments (newest first).
 - `DELETE /api/comments/:commentId` delete a comment owned by the current user.
 
+## Chat Routes (Bearer auth required, mutual follows only)
+
+- `GET /api/chats` returns chat list for mutual follows with last message + unread count.
+- `GET /api/chats/:userId/messages` query params: `page?`, `limit?` returns conversation messages (newest last).
+- `POST /api/chats/:userId/messages` multipart/form-data: optional `text`, optional `file` (image/video/audio/other). Creates conversation if missing.
+- `POST /api/chats/:userId/read` marks messages from the user as read.
+
 ## User Profile Routes (Bearer auth required)
 
 - `GET /api/users/:userId/overview` returns user + profile + counts (posts, followers, following) + media counts + viewer follow state.
@@ -127,3 +134,4 @@ npm start     # production
 - Users persist in MongoDB (`MONGODB_URI`).
 - Refresh tokens are opaque, stored hashed in MongoDB, and rotated on each refresh.
 - Facebook/Instagram sharing requires Meta Graph API credentials and permissions.
+- Socket.IO uses JWT auth via `handshake.auth.token`, and emits `message:new` to both participants.

@@ -1,0 +1,103 @@
+const mongoose = require('mongoose');
+
+const Follow = require('../models/Follow');
+const Conversation = require('../models/Conversation');
+const Message = require('../models/Message');
+
+function makePairKey(a, b) {
+  const [first, second] = [a.toString(), b.toString()].sort();
+  return `${first}:${second}`;
+}
+
+async function ensureMutualFollow(userId, otherUserId) {
+  const [follows, followedBy] = await Promise.all([
+    Follow.exists({ followerId: userId, followingId: otherUserId }),
+    Follow.exists({ followerId: otherUserId, followingId: userId }),
+  ]);
+  return Boolean(follows && followedBy);
+}
+
+function normalizeText(value) {
+  if (typeof value !== 'string') return '';
+  return value.trim();
+}
+
+function registerChatSocket(io, socket) {
+  socket.on('message:send', async (payload = {}, ack) => {
+    try {
+      const senderId = socket.userId;
+      const recipientId = payload.recipientId || payload.userId;
+      const text = normalizeText(payload.text);
+
+      if (!senderId) {
+        throw new Error('Unauthorized');
+      }
+
+      if (!mongoose.isValidObjectId(recipientId)) {
+        throw new Error('Invalid recipient id.');
+      }
+
+      if (!text) {
+        throw new Error('Message text is required.');
+      }
+
+      if (senderId.toString() === recipientId.toString()) {
+        throw new Error('Cannot chat with yourself.');
+      }
+
+      const mutual = await ensureMutualFollow(senderId, recipientId);
+      if (!mutual) {
+        throw new Error('Chat available only for mutual follows.');
+      }
+
+      const pairKey = makePairKey(senderId, recipientId);
+      const conversation = await Conversation.findOneAndUpdate(
+        { pairKey },
+        {
+          $setOnInsert: {
+            pairKey,
+            participants: [senderId, recipientId],
+          },
+        },
+        { new: true, upsert: true },
+      );
+
+      const message = await Message.create({
+        conversationId: conversation._id,
+        senderId,
+        recipientId,
+        text,
+      });
+
+      const lastMessage = {
+        senderId,
+        text,
+        createdAt: message.createdAt,
+      };
+
+      await Conversation.updateOne(
+        { _id: conversation._id },
+        { $set: { lastMessage }, $currentDate: { updatedAt: true } },
+      );
+
+      io.to(`user:${senderId}`).emit('message:new', {
+        conversationId: conversation._id,
+        message,
+      });
+      io.to(`user:${recipientId}`).emit('message:new', {
+        conversationId: conversation._id,
+        message,
+      });
+
+      if (typeof ack === 'function') {
+        ack({ ok: true, message, conversationId: conversation._id });
+      }
+    } catch (err) {
+      if (typeof ack === 'function') {
+        ack({ ok: false, error: err.message || 'Message failed.' });
+      }
+    }
+  });
+}
+
+module.exports = { registerChatSocket };

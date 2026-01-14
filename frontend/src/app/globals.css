@@ -484,6 +484,112 @@ textarea {
   color: rgba(255, 255, 255, 0.6);
 }
 
+.chat-list {
+  display: grid;
+  gap: 12px;
+  margin-top: 12px;
+}
+
+.chat-row {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  gap: 12px;
+  align-items: center;
+  padding: 12px 14px;
+  border-radius: 14px;
+  border: 1px solid var(--border);
+  background: rgba(18, 17, 23, 0.04);
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.chat-row:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 12px 24px rgba(18, 17, 23, 0.12);
+}
+
+.chat-meta {
+  display: grid;
+  gap: 4px;
+}
+
+.chat-preview {
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+
+.chat-unread {
+  min-width: 26px;
+  padding: 4px 8px;
+  border-radius: 999px;
+  background: var(--accent-3);
+  color: #ffffff;
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-align: center;
+}
+
+.chat-thread-header {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 14px;
+  align-items: center;
+}
+
+.chat-thread {
+  display: grid;
+  gap: 12px;
+  margin: 12px 0;
+}
+
+.chat-message {
+  max-width: 78%;
+  padding: 10px 12px;
+  border-radius: 14px;
+  background: rgba(18, 17, 23, 0.06);
+  display: grid;
+  gap: 8px;
+}
+
+.chat-message.mine {
+  margin-left: auto;
+  background: linear-gradient(120deg, rgba(255, 111, 44, 0.2), rgba(255, 211, 107, 0.3));
+}
+
+.chat-time {
+  font-size: 0.7rem;
+  color: var(--muted);
+}
+
+.chat-input {
+  display: grid;
+  grid-template-columns: 1fr 1fr auto;
+  gap: 10px;
+  align-items: center;
+}
+
+.chat-input input[type="text"] {
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  padding: 10px 12px;
+}
+
+.chat-input input[type="file"] {
+  border-radius: 12px;
+  border: 1px dashed var(--border);
+  padding: 8px;
+  background: rgba(255, 255, 255, 0.7);
+}
+
+.chat-attachment {
+  width: 100%;
+  border-radius: 12px;
+}
+
+.chat-file {
+  font-size: 0.85rem;
+  color: var(--accent-3);
+}
+
 .tag {
   padding: 2px 8px;
   border-radius: 999px;
@@ -516,5 +622,8 @@ textarea {
   }
   .card {
     padding: 18px;
+  }
+  .chat-input {
+    grid-template-columns: 1fr;
   }
 }

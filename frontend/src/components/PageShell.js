@@ -22,12 +22,15 @@ export default function PageShell({ title, subtitle, actions, children }) {
             <Link className="btn ghost" href="/feed">
               Feed
             </Link>
-            <Link className="btn ghost" href="/saved">
-              Saved
-            </Link>
-            <Link className="btn ghost" href="/profile">
-              Profile
-            </Link>
+          <Link className="btn ghost" href="/saved">
+            Saved
+          </Link>
+          <Link className="btn ghost" href="/chat">
+            Chat
+          </Link>
+          <Link className="btn ghost" href="/profile">
+            Profile
+          </Link>
           </div>
         </div>
         <ApiConfigBar />
