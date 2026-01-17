@@ -1,3 +1,4 @@
+const mongoose = require('mongoose');
 const { validationResult } = require('express-validator');
 
 const Post = require('../models/Post');
@@ -25,13 +26,7 @@ function detectMediaType(mimetype) {
   return null;
 }
 
-async function createPost(req, res) {
-  const validationError = handleValidation(req, res);
-  if (validationError !== null) return;
-
-  const { id: userId } = req.user;
-  const { description } = req.body;
-
+async function enforceUblastShareRequirement(userId) {
   const now = new Date();
   const activeUblasts = await UBlast.find({
     status: 'released',
@@ -40,19 +35,31 @@ async function createPost(req, res) {
     .select('_id')
     .lean();
 
-  if (activeUblasts.length > 0) {
-    const shared = await Post.find({
-      userId,
-      ublastId: { $in: activeUblasts.map((ublast) => ublast._id) },
-    })
-      .select('ublastId')
-      .lean();
+  if (activeUblasts.length === 0) return null;
 
-    if (shared.length < activeUblasts.length) {
-      return res.status(403).json({
-        error: 'You must share active UBlasts before creating new posts.',
-      });
-    }
+  const shared = await Post.find({
+    userId,
+    ublastId: { $in: activeUblasts.map((ublast) => ublast._id) },
+  })
+    .select('ublastId')
+    .lean();
+
+  if (shared.length < activeUblasts.length) {
+    return 'You must share active UBlasts before creating new posts.';
+  }
+  return null;
+}
+
+async function createPost(req, res) {
+  const validationError = handleValidation(req, res);
+  if (validationError !== null) return;
+
+  const { id: userId } = req.user;
+  const { description } = req.body;
+
+  const ublastError = await enforceUblastShareRequirement(userId);
+  if (ublastError) {
+    return res.status(403).json({ error: ublastError });
   }
 
   if (!req.file) {
@@ -149,7 +156,75 @@ async function deletePost(req, res) {
   return res.status(200).json({ message: 'Post deleted.' });
 }
 
+async function sharePost(req, res) {
+  const { id: userId } = req.user;
+  const { postId } = req.params;
+
+  if (!mongoose.isValidObjectId(postId)) {
+    return res.status(400).json({ error: 'Invalid post id.' });
+  }
+
+  const ublastError = await enforceUblastShareRequirement(userId);
+  if (ublastError) {
+    return res.status(403).json({ error: ublastError });
+  }
+
+  const source = await Post.findById(postId).lean();
+  if (!source) {
+    return res.status(404).json({ error: 'Post not found.' });
+  }
+
+  if (source.status === 'removed' || source.isApproved === false) {
+    return res.status(400).json({ error: 'Post is not available for sharing.' });
+  }
+
+  if (!source.mediaUrl || !source.mediaType) {
+    return res.status(400).json({ error: 'Post media is missing.' });
+  }
+
+  const profile = await Profile.findOne({ userId }).lean();
+  if (!profile) {
+    return res.status(400).json({ error: 'Profile required before sharing.' });
+  }
+
+  const created = await Post.create({
+    userId,
+    description: source.description,
+    mediaType: source.mediaType,
+    mediaUrl: source.mediaUrl,
+    shareToFacebook: false,
+    shareToInstagram: false,
+    shareStatus: {
+      facebook: { status: 'none' },
+      instagram: { status: 'none' },
+    },
+    ublastId: source.ublastId,
+    sharedFromPostId: source._id,
+  });
+
+  await Profile.updateOne(
+    { userId },
+    {
+      $inc: {
+        postsCount: 1,
+        [`${source.mediaType}Count`]: 1,
+      },
+      $push: {
+        [`${source.mediaType}Posts`]: {
+          postId: created._id,
+          mediaUrl: created.mediaUrl,
+          description: created.description,
+          createdAt: created.createdAt,
+        },
+      },
+    },
+  );
+
+  return res.status(201).json({ post: created });
+}
+
 module.exports = {
   createPost,
   deletePost,
+  sharePost,
 };

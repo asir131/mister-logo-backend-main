@@ -3,7 +3,7 @@ const { body } = require('express-validator');
 const multer = require('multer');
 
 const authenticate = require('../middleware/auth');
-const { createPost, deletePost } = require('../controllers/postController');
+const { createPost, deletePost, sharePost } = require('../controllers/postController');
 
 const upload = multer({
   storage: multer.memoryStorage(),
@@ -36,5 +36,6 @@ router.post(
 );
 
 router.delete('/:postId', authenticate, deletePost);
+router.post('/:postId/share', authenticate, sharePost);
 
 module.exports = router;

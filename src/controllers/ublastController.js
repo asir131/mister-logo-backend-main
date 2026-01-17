@@ -54,14 +54,24 @@ async function getEligibility(req, res) {
 async function getActiveUblasts(req, res) {
   const userId = req.user.id;
   const now = new Date();
+  const page = Number.parseInt(req.query.page, 10) > 0 ? Number.parseInt(req.query.page, 10) : 1;
+  const limit = Number.parseInt(req.query.limit, 10) > 0 ? Math.min(50, Number.parseInt(req.query.limit, 10)) : 12;
+  const skip = (page - 1) * limit;
 
-  const ublasts = await UBlast.find({
-    status: 'released',
-    expiresAt: { $gt: now },
-  })
-    .sort({ releasedAt: -1 })
-    .limit(32)
-    .lean();
+  const [totalCount, ublasts] = await Promise.all([
+    UBlast.countDocuments({
+      status: 'released',
+      expiresAt: { $gt: now },
+    }),
+    UBlast.find({
+      status: 'released',
+      expiresAt: { $gt: now },
+    })
+      .sort({ releasedAt: -1 })
+      .skip(skip)
+      .limit(limit)
+      .lean(),
+  ]);
 
   if (ublasts.length === 0) {
     return res.status(200).json({ ublasts: [] });
@@ -93,7 +103,13 @@ async function getActiveUblasts(req, res) {
     };
   });
 
-  return res.status(200).json({ ublasts: formatted });
+  const totalPages = Math.max(1, Math.ceil(totalCount / limit));
+  return res.status(200).json({
+    ublasts: formatted,
+    page,
+    totalPages,
+    totalCount,
+  });
 }
 
 async function submitUblast(req, res) {
@@ -220,13 +236,7 @@ async function shareUblastInternal({ userId, ublastId, shareType }) {
     return { status: 403, error: 'Share window expired.' };
   }
 
-  const existingPost = await Post.findOne({
-    userId,
-    ublastId: ublast._id,
-  }).lean();
-  if (existingPost) {
-    return { post: existingPost };
-  }
+  // allow multiple shares; do not dedupe by existing share
 
   if (!ublast.mediaUrl || !ublast.mediaType) {
     return { status: 400, error: 'UBlast media is missing.' };

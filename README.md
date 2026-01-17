@@ -96,6 +96,7 @@ npm start     # production
 - `POST /api/posts` multipart/form-data: `media` (file), fields `{ description?, shareToFacebook?, shareToInstagram? }`.
   - Accepts image/video/audio uploads.
   - Shares are queued asynchronously (placeholder worker logs for now).
+- `POST /api/posts/:postId/share` creates a new feed post by re-sharing an existing post.
 - `DELETE /api/posts/:postId` delete a post owned by the current user.
 
 ## Feed Routes (Bearer auth required)
@@ -138,9 +139,9 @@ npm start     # production
 
 ## Trending & UBlast Routes (Bearer auth required)
 
-- `GET /api/trending` returns top UBlasts, manual pinned posts, and organic posts.
+- `GET /api/trending` returns top/manual/organic sections (pagination: `topPage`, `manualPage`, `organicPage`, `topLimit`, `manualLimit`, `organicLimit`).
 - `GET /api/ublasts/eligibility` returns eligibility + blockedUntil.
-- `GET /api/ublasts/active` returns active UBlasts with share status info.
+- `GET /api/ublasts/active` returns active UBlasts with share status info (pagination: `page`, `limit`).
 - `POST /api/ublasts/:ublastId/share` body: `{ shareType: "feed" | "story" }` creates a share post.
 - `POST /api/ublasts/:ublastId/submissions` multipart/form-data: `media` (file), optional `proposedDate`.
 

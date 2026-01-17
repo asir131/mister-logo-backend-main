@@ -16,6 +16,12 @@ async function getTrending(req, res) {
   const limitTop = parsePaging(req.query.topLimit, 16, 16);
   const limitManual = parsePaging(req.query.manualLimit, 16, 16);
   const limitOrganic = parsePaging(req.query.organicLimit, 64, 100);
+  const topPage = parsePaging(req.query.topPage, 1, 100);
+  const manualPage = parsePaging(req.query.manualPage, 1, 100);
+  const organicPage = parsePaging(req.query.organicPage, 1, 100);
+  const topSkip = (topPage - 1) * limitTop;
+  const manualSkip = (manualPage - 1) * limitManual;
+  const organicSkip = (organicPage - 1) * limitOrganic;
 
   const activeUblasts = await UBlast.find({
     status: 'released',
@@ -23,7 +29,6 @@ async function getTrending(req, res) {
     expiresAt: { $gt: now },
   })
     .sort({ releasedAt: -1 })
-    .limit(limitTop)
     .lean();
 
   const activeUblastIds = activeUblasts.map((ublast) => ublast._id);
@@ -38,25 +43,33 @@ async function getTrending(req, res) {
     ],
   };
 
-  const topPosts = activeUblastIds.length
-    ? await Post.find({
-        ublastId: { $in: activeUblastIds },
-        ...visibilityMatch,
-      })
-        .sort({ createdAt: -1 })
-        .limit(limitTop)
-        .lean()
-    : [];
+  const topFilter = activeUblastIds.length
+    ? { ublastId: { $in: activeUblastIds }, ...visibilityMatch }
+    : null;
+  const [topTotalCount, topPosts] = topFilter
+    ? await Promise.all([
+        Post.countDocuments(topFilter),
+        Post.find(topFilter)
+          .sort({ createdAt: -1 })
+          .skip(topSkip)
+          .limit(limitTop)
+          .lean(),
+      ])
+    : [0, []];
 
   const manualPlacements = await TrendingPlacement.find({
     section: 'manual',
     $or: [{ endAt: null }, { endAt: { $gt: now } }],
   })
     .sort({ position: 1, createdAt: -1 })
-    .limit(limitManual)
     .lean();
 
-  const manualPostIds = manualPlacements.map((placement) => placement.postId);
+  const manualTotalCount = manualPlacements.length;
+  const pagedManualPlacements = manualPlacements.slice(
+    manualSkip,
+    manualSkip + limitManual,
+  );
+  const manualPostIds = pagedManualPlacements.map((placement) => placement.postId);
   const manualPosts = manualPostIds.length
     ? await Post.find({
         _id: { $in: manualPostIds },
@@ -69,6 +82,7 @@ async function getTrending(req, res) {
   );
 
   const manual = manualPlacements
+    .slice(manualSkip, manualSkip + limitManual)
     .map((placement) => ({
       placementId: placement._id,
       position: placement.position,
@@ -92,7 +106,7 @@ async function getTrending(req, res) {
       : {}),
   };
 
-  const organic = await Post.aggregate([
+  const organicPipeline = [
     { $match: organicMatch },
     {
       $lookup: {
@@ -169,6 +183,7 @@ async function getTrending(req, res) {
       },
     },
     { $sort: { engagementScore: -1, createdAt: -1 } },
+    { $skip: organicSkip },
     { $limit: limitOrganic },
     {
       $project: {
@@ -183,7 +198,33 @@ async function getTrending(req, res) {
         saveCount: 1,
       },
     },
+  ];
+
+  const organicCountPipeline = [
+    { $match: organicMatch },
+    {
+      $lookup: {
+        from: 'users',
+        localField: 'userId',
+        foreignField: '_id',
+        as: 'author',
+      },
+    },
+    { $unwind: '$author' },
+    {
+      $match: {
+        'author.isBlocked': { $ne: true },
+        'author.isBanned': { $ne: true },
+      },
+    },
+    { $count: 'count' },
+  ];
+
+  const [organic, organicCount] = await Promise.all([
+    Post.aggregate(organicPipeline),
+    Post.aggregate(organicCountPipeline),
   ]);
+  const organicTotalCount = organicCount[0]?.count || 0;
 
   const items = [
     ...topPosts.map((post) => ({ type: 'ublast', post })),
@@ -196,6 +237,23 @@ async function getTrending(req, res) {
     manual,
     organic,
     items,
+    meta: {
+      top: {
+        page: topPage,
+        totalPages: Math.max(1, Math.ceil(topTotalCount / limitTop)),
+        totalCount: topTotalCount,
+      },
+      manual: {
+        page: manualPage,
+        totalPages: Math.max(1, Math.ceil(manualTotalCount / limitManual)),
+        totalCount: manualTotalCount,
+      },
+      organic: {
+        page: organicPage,
+        totalPages: Math.max(1, Math.ceil(organicTotalCount / limitOrganic)),
+        totalCount: organicTotalCount,
+      },
+    },
   });
 }
 

@@ -25,6 +25,7 @@ const postSchema = new mongoose.Schema(
     },
     isApproved: { type: Boolean, default: true, index: true },
     ublastId: { type: mongoose.Schema.Types.ObjectId, ref: 'UBlast' },
+    sharedFromPostId: { type: mongoose.Schema.Types.ObjectId, ref: 'Post' },
     shareToFacebook: { type: Boolean, default: false },
     shareToInstagram: { type: Boolean, default: false },
     shareStatus: {

@@ -150,6 +150,26 @@ export default function FeedPage() {
     );
   }
 
+  async function handleSharePost(post) {
+    if (!auth.token) return;
+    setStatus({ type: "loading", message: "Sharing to feed..." });
+    const result = await apiRequest({
+      path: `/api/posts/${post._id}/share`,
+      method: "POST",
+      body: {},
+      token: auth.token,
+    });
+    if (!result.ok) {
+      setStatus({
+        type: "error",
+        message: result.data?.error || "Share failed.",
+      });
+      return;
+    }
+    setStatus({ type: "success", message: "Shared to your feed." });
+    loadFeed(1, true);
+  }
+
   async function handleLoadComments(post, page = 1) {
     if (!auth.token) return;
     setCommentsByPost((prev) => ({
@@ -253,6 +273,7 @@ export default function FeedPage() {
           onToggleFollow={handleToggleFollow}
           onToggleLike={handleToggleLike}
           onToggleSave={handleToggleSave}
+          onSharePost={handleSharePost}
           commentsState={commentsByPost[post._id]}
           onLoadComments={handleLoadComments}
           onAddComment={handleAddComment}

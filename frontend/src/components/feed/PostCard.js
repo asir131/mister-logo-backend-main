@@ -22,6 +22,7 @@ export default function PostCard({
   onToggleFollow,
   onToggleLike,
   onToggleSave,
+  onSharePost,
   commentsState,
   onLoadComments,
   onAddComment,
@@ -92,6 +93,12 @@ export default function PostCard({
         <button className="btn ghost" type="button" onClick={() => onToggleLike(post)}>
           {post.viewerHasLiked ? "Unlike" : "Like"} Aú {post.likeCount}
         </button>
+        {onSharePost && (
+          <button className="btn ghost" type="button" onClick={() => onSharePost(post)}>
+            Share to Feed
+          </button>
+        )}
+
         {onToggleSave && (
           <button
             className="btn ghost"
