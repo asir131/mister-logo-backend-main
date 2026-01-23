@@ -64,6 +64,14 @@ async function getSavedPosts(req, res) {
     },
     { $unwind: '$post' },
     {
+      $match: {
+        $and: [
+          { $or: [{ 'post.status': 'published' }, { 'post.status': { $exists: false } }] },
+          { $or: [{ 'post.isApproved': true }, { 'post.isApproved': { $exists: false } }] },
+        ],
+      },
+    },
+    {
       $lookup: {
         from: 'users',
         localField: 'post.userId',

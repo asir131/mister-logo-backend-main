@@ -13,6 +13,7 @@ const emptyPost = {
   description: "",
   shareToFacebook: false,
   shareToInstagram: false,
+  scheduledFor: "",
 };
 
 export default function FeedPage() {
@@ -70,6 +71,7 @@ export default function FeedPage() {
     if (form.description) formData.append("description", form.description);
     formData.append("shareToFacebook", form.shareToFacebook);
     formData.append("shareToInstagram", form.shareToInstagram);
+    if (form.scheduledFor) formData.append("scheduledFor", form.scheduledFor);
     if (mediaFile) formData.append("media", mediaFile);
     setStatus({ type: "loading", message: "Creating post..." });
     const result = await apiRequest({
@@ -84,7 +86,10 @@ export default function FeedPage() {
       });
       return;
     }
-    setStatus({ type: "success", message: "Post created successfully." });
+    setStatus({
+      type: "success",
+      message: result.data?.message || "Post created successfully.",
+    });
     setForm(emptyPost);
     setMediaFile(null);
     loadFeed(1, true);

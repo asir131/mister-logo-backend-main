@@ -261,6 +261,8 @@ async function shareUblastInternal({ userId, ublastId, shareType }) {
       instagram: { status: 'none' },
     },
     ublastId: ublast._id,
+    status: 'published',
+    publishedAt: new Date(),
   });
 
   await Profile.updateOne(

@@ -28,6 +28,9 @@ export default function PageShell({ title, subtitle, actions, children }) {
           <Link className="btn ghost" href="/saved">
             Saved
           </Link>
+          <Link className="btn ghost" href="/scheduled">
+            Scheduled
+          </Link>
           <Link className="btn ghost" href="/chat">
             Chat
           </Link>

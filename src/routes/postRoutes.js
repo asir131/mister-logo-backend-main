@@ -3,7 +3,14 @@ const { body } = require('express-validator');
 const multer = require('multer');
 
 const authenticate = require('../middleware/auth');
-const { createPost, deletePost, sharePost } = require('../controllers/postController');
+const {
+  createPost,
+  deletePost,
+  sharePost,
+  listScheduledPosts,
+  updateScheduledPost,
+  cancelScheduledPost,
+} = require('../controllers/postController');
 
 const upload = multer({
   storage: multer.memoryStorage(),
@@ -31,10 +38,31 @@ router.post(
     body('description').optional({ nullable: true }).trim(),
     body('shareToFacebook').optional({ nullable: true }).isBoolean().toBoolean(),
     body('shareToInstagram').optional({ nullable: true }).isBoolean().toBoolean(),
+    body('scheduledFor')
+      .optional({ nullable: true, checkFalsy: true })
+      .isISO8601()
+      .withMessage('scheduledFor must be a valid date'),
   ],
   createPost,
 );
 
+router.get('/scheduled', authenticate, listScheduledPosts);
+router.patch(
+  '/:postId/scheduled',
+  authenticate,
+  upload.single('media'),
+  [
+    body('description').optional({ nullable: true }).trim(),
+    body('shareToFacebook').optional({ nullable: true }).isBoolean().toBoolean(),
+    body('shareToInstagram').optional({ nullable: true }).isBoolean().toBoolean(),
+    body('scheduledFor')
+      .optional({ nullable: true, checkFalsy: true })
+      .isISO8601()
+      .withMessage('scheduledFor must be a valid date'),
+  ],
+  updateScheduledPost,
+);
+router.post('/:postId/cancel', authenticate, cancelScheduledPost);
 router.delete('/:postId', authenticate, deletePost);
 router.post('/:postId/share', authenticate, sharePost);
 

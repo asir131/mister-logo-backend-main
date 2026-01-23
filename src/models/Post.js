@@ -19,10 +19,12 @@ const postSchema = new mongoose.Schema(
     size: { type: Number },
     status: {
       type: String,
-      enum: ['published', 'removed'],
+      enum: ['published', 'scheduled', 'removed', 'cancelled'],
       default: 'published',
       index: true,
     },
+    scheduledFor: { type: Date, index: true },
+    publishedAt: { type: Date, index: true },
     isApproved: { type: Boolean, default: true, index: true },
     ublastId: { type: mongoose.Schema.Types.ObjectId, ref: 'UBlast' },
     sharedFromPostId: { type: mongoose.Schema.Types.ObjectId, ref: 'Post' },

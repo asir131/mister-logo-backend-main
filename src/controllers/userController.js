@@ -40,12 +40,19 @@ async function getUserOverview(req, res) {
     followingCount === undefined ||
     postsCount === undefined
   ) {
+    const visibilityMatch = {
+      $and: [
+        { $or: [{ status: 'published' }, { status: { $exists: false } }] },
+        { $or: [{ isApproved: true }, { isApproved: { $exists: false } }] },
+      ],
+    };
+
     const [followers, following, posts, mediaCounts] = await Promise.all([
       Follow.countDocuments({ followingId: userId }),
       Follow.countDocuments({ followerId: userId }),
-      Post.countDocuments({ userId }),
+      Post.countDocuments({ userId, ...visibilityMatch }),
       Post.aggregate([
-        { $match: { userId: new mongoose.Types.ObjectId(userId) } },
+        { $match: { userId: new mongoose.Types.ObjectId(userId), ...visibilityMatch } },
         { $group: { _id: '$mediaType', count: { $sum: 1 } } },
       ]),
     ]);
@@ -105,6 +112,10 @@ async function getUserPosts(req, res) {
   const match = {
     userId: new mongoose.Types.ObjectId(userId),
     mediaType,
+    $and: [
+      { $or: [{ status: 'published' }, { status: { $exists: false } }] },
+      { $or: [{ isApproved: true }, { isApproved: { $exists: false } }] },
+    ],
   };
 
   const [totalCount, posts] = await Promise.all([

@@ -96,6 +96,10 @@ npm start     # production
 - `POST /api/posts` multipart/form-data: `media` (file), fields `{ description?, shareToFacebook?, shareToInstagram? }`.
   - Accepts image/video/audio uploads.
   - Shares are queued asynchronously (placeholder worker logs for now).
+- `POST /api/posts` optional field `scheduledFor` (ISO8601) to schedule a post for future publishing.
+- `GET /api/posts/scheduled` list the current user's scheduled posts (includes status/publishedAt).
+- `PATCH /api/posts/:postId/scheduled` update a scheduled post (fields: `description?`, `scheduledFor`, `shareToFacebook?`, `shareToInstagram?`, optional `media`).
+- `POST /api/posts/:postId/cancel` cancel a scheduled post.
 - `POST /api/posts/:postId/share` creates a new feed post by re-sharing an existing post.
 - `DELETE /api/posts/:postId` delete a post owned by the current user.
 

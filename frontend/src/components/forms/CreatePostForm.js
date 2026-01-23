@@ -34,6 +34,15 @@ export default function CreatePostForm({
           Share to Instagram
         </label>
       </div>
+      <label className="toggle">
+        <input
+          type="datetime-local"
+          name="scheduledFor"
+          value={form.scheduledFor}
+          onChange={onChange}
+        />
+        Schedule time (optional)
+      </label>
       <input type="file" accept="image/*,video/*,audio/*" onChange={onFileChange} />
       <div className="actions">
         <button className="btn" type="button" onClick={onSubmit}>

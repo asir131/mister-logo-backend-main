@@ -15,9 +15,17 @@ async function getFeed(req, res) {
   const limit = parsePaging(req.query.limit, 5, 20);
   const skip = (page - 1) * limit;
 
+  const visibilityMatch = {
+    $and: [
+      { $or: [{ status: 'published' }, { status: { $exists: false } }] },
+      { $or: [{ isApproved: true }, { isApproved: { $exists: false } }] },
+    ],
+  };
+
   const [totalCount, posts] = await Promise.all([
-    Post.countDocuments(),
+    Post.countDocuments(visibilityMatch),
     Post.aggregate([
+      { $match: visibilityMatch },
       { $sort: { createdAt: -1 } },
       { $skip: skip },
       { $limit: limit },
