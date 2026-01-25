@@ -9,6 +9,7 @@ const SavedPost = require('../models/SavedPost');
 const { uploadMediaBuffer } = require('../services/cloudinary');
 const { enqueuePostShare } = require('../services/shareQueue');
 const lateApi = require('../services/lateApi');
+const { resolvePlatformsForUser } = require('../services/lateAccounts');
 const UBlast = require('../models/UBlast');
 const User = require('../models/User');
 
@@ -210,12 +211,33 @@ async function createPost(req, res) {
 
     if (isScheduled && shareTargets.length > 0) {
       try {
+        const { platforms, missing, lateProfileId } = await resolvePlatformsForUser(
+          userId,
+          shareTargets,
+        );
+        if (missing.length) {
+          const failedStatus = {};
+          missing.forEach((platform) => {
+            failedStatus[`shareStatus.${platform}`] = {
+              status: 'failed',
+              error: 'Platform account not connected.',
+              updatedAt: new Date(),
+            };
+          });
+          await Post.updateOne({ _id: created._id }, { $set: failedStatus });
+        }
+        if (platforms.length === 0) {
+          return res.status(201).json({
+            message: 'Post scheduled successfully.',
+            post: created,
+          });
+        }
         const latePost = await lateApi.createPost({
           content: description || '',
           mediaUrls: [created.mediaUrl],
-          platforms: shareTargets,
+          platforms,
           scheduledAt: scheduledForInput.toISOString(),
-          lateAccountId: user?.lateAccountId,
+          lateAccountId: lateProfileId,
         });
         await Post.updateOne(
           { _id: created._id },

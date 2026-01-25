@@ -19,6 +19,15 @@ const userSchema = new mongoose.Schema(
       type: [String],
       default: [],
     },
+    connectedAccounts: [
+      {
+        platform: { type: String },
+        accountId: { type: String },
+        username: { type: String },
+        displayName: { type: String },
+        profileId: { type: String },
+      },
+    ],
     lateAccountId: { type: String, index: true },
     legacyPlatformTokens: { type: mongoose.Schema.Types.Mixed },
   },

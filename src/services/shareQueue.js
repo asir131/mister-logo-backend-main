@@ -1,5 +1,5 @@
 const Post = require('../models/Post');
-const User = require('../models/User');
+const { resolvePlatformsForUser } = require('./lateAccounts');
 const lateApi = require('./lateApi');
 
 function normalizeTargets(post) {
@@ -23,12 +23,28 @@ async function enqueuePostShare(post) {
   });
 
   try {
-    const user = await User.findById(post.userId).select('lateAccountId').lean();
+    const { platforms, missing, lateProfileId } = await resolvePlatformsForUser(
+      post.userId,
+      targets,
+    );
+    if (missing.length) {
+      const update = {};
+      missing.forEach((platform) => {
+        update[`shareStatus.${platform}`] = {
+          status: 'failed',
+          error: 'Platform account not connected.',
+          updatedAt: new Date(),
+        };
+      });
+      await Post.updateOne({ _id: post._id }, { $set: update });
+    }
+    if (platforms.length === 0) return;
+
     const latePost = await lateApi.createPost({
       content: post.description || '',
       mediaUrls: [post.mediaUrl],
-      platforms: targets,
-      lateAccountId: user?.lateAccountId,
+      platforms,
+      lateAccountId: lateProfileId,
     });
     await Post.updateOne(
       { _id: post._id },
@@ -39,7 +55,14 @@ async function enqueuePostShare(post) {
       },
     );
   } catch (err) {
-    console.error('LATE share error:', err);
+    console.error('LATE share error:', {
+      message: err.message,
+      status: err.status,
+      payload: err.payload,
+      url: err.url,
+      method: err.method,
+      requestBody: err.requestBody,
+    });
     const update = {};
     const incs = {};
     targets.forEach((platform) => {

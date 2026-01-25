@@ -33,10 +33,11 @@ ADMIN_PASSWORD=1234
 ADMIN_JWT_EXPIRES_IN=12h
 UBLAST_SHARE_WINDOW_HOURS=48
 UBLAST_BLOCK_DAYS=90
-LATE_API_BASE_URL=https://api.getlate.dev/v1
+LATE_API_BASE_URL=https://getlate.dev/api/v1
 LATE_API_KEY=your_late_api_key
 LATE_WEBHOOK_SECRET=your_webhook_secret
 LATE_OAUTH_REDIRECT_URI=http://localhost:5000/api/accounts/late-callback
+LATE_PROFILE_ID=your_late_profile_id
 ```
 
 Install and run:
