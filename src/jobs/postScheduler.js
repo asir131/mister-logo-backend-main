@@ -3,9 +3,17 @@ const Profile = require('../models/Profile');
 const { enqueuePostShare } = require('../services/shareQueue');
 
 function buildShareStatus(post) {
+  const targets = new Set(post.shareTargets || []);
+  if (post.shareToFacebook) targets.add('facebook');
+  if (post.shareToInstagram) targets.add('instagram');
+
   return {
-    facebook: { status: post.shareToFacebook ? 'queued' : 'none' },
-    instagram: { status: post.shareToInstagram ? 'queued' : 'none' },
+    twitter: { status: targets.has('twitter') ? 'pending' : 'none' },
+    tiktok: { status: targets.has('tiktok') ? 'pending' : 'none' },
+    snapchat: { status: targets.has('snapchat') ? 'pending' : 'none' },
+    youtube: { status: targets.has('youtube') ? 'pending' : 'none' },
+    facebook: { status: targets.has('facebook') ? 'pending' : 'none' },
+    instagram: { status: targets.has('instagram') ? 'pending' : 'none' },
   };
 }
 
@@ -52,7 +60,9 @@ async function publishScheduledPosts() {
       },
     );
 
-    enqueuePostShare(updated);
+    if (!updated.latePostId) {
+      enqueuePostShare(updated);
+    }
   }
 }
 

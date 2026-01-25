@@ -1,13 +1,23 @@
+const PLATFORMS = [
+  { key: "twitter", label: "Twitter/X", auto: true },
+  { key: "tiktok", label: "TikTok", auto: true },
+  { key: "snapchat", label: "Snapchat", auto: true },
+  { key: "youtube", label: "YouTube", auto: true },
+  { key: "instagram", label: "Instagram", auto: true },
+  { key: "facebook", label: "Facebook", auto: true },
+];
+
 export default function CreatePostForm({
   form,
   onChange,
+  onToggleTarget,
   onFileChange,
   onSubmit,
 }) {
   return (
     <section className="card">
       <h2>Create post</h2>
-      <p>Upload media and optionally queue social shares.</p>
+      <p>Upload media and select where to share.</p>
       <textarea
         name="description"
         value={form.description}
@@ -15,24 +25,16 @@ export default function CreatePostForm({
         placeholder="Post description"
       />
       <div className="row">
-        <label className="toggle">
-          <input
-            type="checkbox"
-            name="shareToFacebook"
-            checked={form.shareToFacebook}
-            onChange={onChange}
-          />
-          Share to Facebook
-        </label>
-        <label className="toggle">
-          <input
-            type="checkbox"
-            name="shareToInstagram"
-            checked={form.shareToInstagram}
-            onChange={onChange}
-          />
-          Share to Instagram
-        </label>
+        {PLATFORMS.map((platform) => (
+          <label className="toggle" key={platform.key}>
+            <input
+              type="checkbox"
+              checked={form.shareTargets?.includes(platform.key)}
+              onChange={() => onToggleTarget(platform.key)}
+            />
+            {platform.label}
+          </label>
+        ))}
       </div>
       <label className="toggle">
         <input

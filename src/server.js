@@ -25,6 +25,8 @@ const trendingRoutes = require("./routes/trendingRoutes");
 const ublastRoutes = require("./routes/ublastRoutes");
 const adminUblastRoutes = require("./routes/adminUblastRoutes");
 const adminAuthRoutes = require("./routes/adminAuthRoutes");
+const accountsRoutes = require("./routes/accountsRoutes");
+const webhooksRoutes = require("./routes/webhooksRoutes");
 const { startUblastJobs } = require("./jobs/ublastScheduler");
 const { startPostScheduler } = require("./jobs/postScheduler");
 
@@ -43,7 +45,13 @@ app.use(
     credentials: true,
   }),
 );
-app.use(express.json());
+app.use(
+  express.json({
+    verify: (req, res, buf) => {
+      req.rawBody = buf;
+    },
+  }),
+);
 app.use(passport.initialize());
 
 app.use("/api/auth", authRoutes);
@@ -58,8 +66,10 @@ app.use("/api/saved-posts", savedPostRoutes);
 app.use("/api/chats", chatRoutes);
 app.use("/api/trending", trendingRoutes);
 app.use("/api/ublasts", ublastRoutes);
+app.use("/api/accounts", accountsRoutes);
 app.use("/api/admin/auth", adminAuthRoutes);
 app.use("/api/admin", adminUblastRoutes);
+app.use("/webhooks", webhooksRoutes);
 
 // Basic health check
 app.get("/health", (req, res) => {

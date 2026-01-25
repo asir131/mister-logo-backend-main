@@ -11,8 +11,7 @@ import { clearAuth, getAuth, getProfile } from "../../lib/authStore";
 
 const emptyPost = {
   description: "",
-  shareToFacebook: false,
-  shareToInstagram: false,
+  shareTargets: [],
   scheduledFor: "",
 };
 
@@ -69,8 +68,9 @@ export default function FeedPage() {
     }
     const formData = new FormData();
     if (form.description) formData.append("description", form.description);
-    formData.append("shareToFacebook", form.shareToFacebook);
-    formData.append("shareToInstagram", form.shareToInstagram);
+    if (form.shareTargets?.length) {
+      formData.append("shareTargets", JSON.stringify(form.shareTargets));
+    }
     if (form.scheduledFor) formData.append("scheduledFor", form.scheduledFor);
     if (mediaFile) formData.append("media", mediaFile);
     setStatus({ type: "loading", message: "Creating post..." });
@@ -255,12 +255,23 @@ export default function FeedPage() {
       <CreatePostForm
         form={form}
         onChange={(event) => {
-          const { name, type, checked, value } = event.target;
+          const { name, value } = event.target;
           setForm((prev) => ({
             ...prev,
-            [name]: type === "checkbox" ? checked : value,
+            [name]: value,
           }));
         }}
+        onToggleTarget={(target) =>
+          setForm((prev) => {
+            const next = new Set(prev.shareTargets || []);
+            if (next.has(target)) {
+              next.delete(target);
+            } else {
+              next.add(target);
+            }
+            return { ...prev, shareTargets: Array.from(next) };
+          })
+        }
         onFileChange={(event) => setMediaFile(event.target.files?.[0] || null)}
         onSubmit={handleCreatePost}
       />

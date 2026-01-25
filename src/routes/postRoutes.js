@@ -38,6 +38,9 @@ router.post(
     body('description').optional({ nullable: true }).trim(),
     body('shareToFacebook').optional({ nullable: true }).isBoolean().toBoolean(),
     body('shareToInstagram').optional({ nullable: true }).isBoolean().toBoolean(),
+    body('shareTargets')
+      .optional({ nullable: true })
+      .custom((value) => typeof value === 'string' || Array.isArray(value)),
     body('scheduledFor')
       .optional({ nullable: true, checkFalsy: true })
       .isISO8601()
@@ -55,6 +58,9 @@ router.patch(
     body('description').optional({ nullable: true }).trim(),
     body('shareToFacebook').optional({ nullable: true }).isBoolean().toBoolean(),
     body('shareToInstagram').optional({ nullable: true }).isBoolean().toBoolean(),
+    body('shareTargets')
+      .optional({ nullable: true })
+      .custom((value) => typeof value === 'string' || Array.isArray(value)),
     body('scheduledFor')
       .optional({ nullable: true, checkFalsy: true })
       .isISO8601()

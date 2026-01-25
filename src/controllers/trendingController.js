@@ -35,7 +35,36 @@ async function getTrending(req, res) {
     .sort({ releasedAt: -1 })
     .lean();
 
+  const shareWindowHours = Number(process.env.UBLAST_SHARE_WINDOW_HOURS || 48);
   const activeUblastIds = activeUblasts.map((ublast) => ublast._id);
+  const viewerIdForActive = req.user?.id;
+  const sharedPosts = viewerIdForActive && activeUblastIds.length
+    ? await Post.find({
+        userId: viewerIdForActive,
+        ublastId: { $in: activeUblastIds },
+      })
+        .select('ublastId createdAt')
+        .lean()
+    : [];
+
+  const sharedByUblast = new Map(
+    sharedPosts.map((post) => [post.ublastId.toString(), post]),
+  );
+
+  const active = activeUblasts.map((ublast) => {
+    const sharedPost = sharedByUblast.get(ublast._id.toString());
+    const releasedAt = ublast.releasedAt || ublast.createdAt;
+    const dueAt = releasedAt
+      ? new Date(new Date(releasedAt).getTime() + shareWindowHours * 60 * 60 * 1000)
+      : null;
+    return {
+      ...ublast,
+      dueAt,
+      viewerHasShared: Boolean(sharedPost),
+      sharedAt: sharedPost?.createdAt || null,
+    };
+  });
+
   const visibilityMatch = {
     $and: [
       {
@@ -274,18 +303,20 @@ async function getTrending(req, res) {
   if (section) {
     switch (section) {
       case 'top':
-        return res.status(200).json({ top: topPosts, meta: { top: meta.top } });
+        return res.status(200).json({ top: topPosts, active, meta: { top: meta.top } });
       case 'manual':
-        return res.status(200).json({ manual, meta: { manual: meta.manual } });
+        return res.status(200).json({ manual, active, meta: { manual: meta.manual } });
       case 'organic':
-        return res.status(200).json({ organic, meta: { organic: meta.organic } });
+        return res.status(200).json({ organic, active, meta: { organic: meta.organic } });
       case 'items':
-        return res.status(200).json({ items });
+        return res.status(200).json({ items, active });
+      case 'active':
+        return res.status(200).json({ active });
       case 'meta':
-        return res.status(200).json({ meta });
+        return res.status(200).json({ meta, active });
       default:
         return res.status(400).json({
-          error: 'section must be one of: top, manual, organic, items, meta',
+          error: 'section must be one of: top, manual, organic, items, meta, active',
         });
     }
   }
@@ -295,6 +326,7 @@ async function getTrending(req, res) {
     manual,
     organic,
     items,
+    active,
     meta,
   });
 }

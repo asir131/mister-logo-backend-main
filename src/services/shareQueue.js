@@ -1,15 +1,61 @@
-function enqueuePostShare(post) {
+const Post = require('../models/Post');
+const User = require('../models/User');
+const lateApi = require('./lateApi');
+
+function normalizeTargets(post) {
+  const targets = new Set();
+  if (Array.isArray(post.shareTargets)) {
+    post.shareTargets.forEach((target) => targets.add(String(target)));
+  }
+  // Backward-compatible flags
+  if (post.shareToFacebook) targets.add('facebook');
+  if (post.shareToInstagram) targets.add('instagram');
+  return Array.from(targets);
+}
+
+async function enqueuePostShare(post) {
   if (!post) return;
-  const targets = [];
-  if (post.shareToFacebook) targets.push('facebook');
-  if (post.shareToInstagram) targets.push('instagram');
+  const targets = normalizeTargets(post);
   if (targets.length === 0) return;
 
   setImmediate(() => {
-    console.log(
-      `Queued post ${post._id} for sharing to: ${targets.join(', ')}`,
-    );
+    console.log(`Queued post ${post._id} for LATE share: ${targets.join(', ')}`);
   });
+
+  try {
+    const user = await User.findById(post.userId).select('lateAccountId').lean();
+    const latePost = await lateApi.createPost({
+      content: post.description || '',
+      mediaUrls: [post.mediaUrl],
+      platforms: targets,
+      lateAccountId: user?.lateAccountId,
+    });
+    await Post.updateOne(
+      { _id: post._id },
+      {
+        $set: {
+          latePostId: latePost.id || latePost.postId,
+        },
+      },
+    );
+  } catch (err) {
+    console.error('LATE share error:', err);
+    const update = {};
+    const incs = {};
+    targets.forEach((platform) => {
+      update[`shareStatus.${platform}`] = {
+        status: 'failed',
+        error: err.message,
+        updatedAt: new Date(),
+      };
+      incs[`attempts.${platform}`] = 1;
+    });
+    const ops = { $set: update };
+    if (Object.keys(incs).length) {
+      ops.$inc = incs;
+    }
+    await Post.updateOne({ _id: post._id }, ops);
+  }
 }
 
 module.exports = {

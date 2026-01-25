@@ -33,6 +33,10 @@ ADMIN_PASSWORD=1234
 ADMIN_JWT_EXPIRES_IN=12h
 UBLAST_SHARE_WINDOW_HOURS=48
 UBLAST_BLOCK_DAYS=90
+LATE_API_BASE_URL=https://api.getlate.dev/v1
+LATE_API_KEY=your_late_api_key
+LATE_WEBHOOK_SECRET=your_webhook_secret
+LATE_OAUTH_REDIRECT_URI=http://localhost:5000/api/accounts/late-callback
 ```
 
 Install and run:
@@ -93,12 +97,14 @@ npm start     # production
 
 ## Post Routes (Bearer auth required)
 
-- `POST /api/posts` multipart/form-data: `media` (file), fields `{ description?, shareToFacebook?, shareToInstagram? }`.
+- `POST /api/posts` multipart/form-data: `media` (file), fields `{ description?, shareTargets? }`.
   - Accepts image/video/audio uploads.
+  - `shareTargets` can include `twitter,tiktok,snapchat,youtube,instagram,facebook` (JSON array or CSV string).
+  - Instagram/Facebook are auto-posted through LATE.
   - Shares are queued asynchronously (placeholder worker logs for now).
 - `POST /api/posts` optional field `scheduledFor` (ISO8601) to schedule a post for future publishing.
 - `GET /api/posts/scheduled` list the current user's scheduled posts (includes status/publishedAt).
-- `PATCH /api/posts/:postId/scheduled` update a scheduled post (fields: `description?`, `scheduledFor`, `shareToFacebook?`, `shareToInstagram?`, optional `media`).
+- `PATCH /api/posts/:postId/scheduled` update a scheduled post (fields: `description?`, `scheduledFor`, `shareTargets?`, optional `media`).
 - `POST /api/posts/:postId/cancel` cancel a scheduled post.
 - `POST /api/posts/:postId/share` creates a new feed post by re-sharing an existing post.
 - `DELETE /api/posts/:postId` delete a post owned by the current user.
@@ -181,3 +187,25 @@ All admin routes accept either `Authorization: Bearer <token>` or `x-admin-key: 
 - Sharing a UBlast creates a feed post from the UBlast media/content.
 - Users with active, unshared UBlast assignments are blocked from creating normal posts until they share.
 - Users must share active UBlasts before creating normal posts.
+- LATE API integration: all shareTargets post through LATE (including Instagram/Facebook).
+
+## Accounts Routes (Bearer auth required)
+
+- `POST /api/accounts/connect-late` returns a LATE connection URL.
+- `GET /api/accounts/late-callback` handles the LATE OAuth callback.
+- `GET /api/accounts` returns connected accounts from LATE.
+- `DELETE /api/accounts/:platform` disconnects a platform in LATE.
+
+## Webhooks
+
+- `POST /webhooks/late` receives LATE post status updates.
+
+## React Native sharing payload
+
+When creating/scheduling a post from React Native, send `shareTargets` in the form-data body:
+
+```
+shareTargets: ["twitter","tiktok","snapchat","youtube","instagram","facebook"]
+```
+
+The backend accepts a JSON array or a comma-separated string (for multipart forms). Instagram/Facebook auto-post through LATE.

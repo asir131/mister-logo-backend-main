@@ -15,6 +15,12 @@ const userSchema = new mongoose.Schema(
     isBlocked: { type: Boolean, default: false },
     isBanned: { type: Boolean, default: false },
     ublastBlockedUntil: { type: Date },
+    connectedPlatforms: {
+      type: [String],
+      default: [],
+    },
+    lateAccountId: { type: String, index: true },
+    legacyPlatformTokens: { type: mongoose.Schema.Types.Mixed },
   },
   { timestamps: true },
 );

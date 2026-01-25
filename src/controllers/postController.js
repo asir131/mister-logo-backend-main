@@ -8,7 +8,9 @@ const Comment = require('../models/Comment');
 const SavedPost = require('../models/SavedPost');
 const { uploadMediaBuffer } = require('../services/cloudinary');
 const { enqueuePostShare } = require('../services/shareQueue');
+const lateApi = require('../services/lateApi');
 const UBlast = require('../models/UBlast');
+const User = require('../models/User');
 
 function handleValidation(req, res) {
   const errors = validationResult(req);
@@ -35,9 +37,73 @@ function parseScheduledFor(value) {
 
 function scheduleShareStatus(shareToFacebook, shareToInstagram) {
   return {
+    twitter: { status: 'none' },
+    tiktok: { status: 'none' },
+    snapchat: { status: 'none' },
+    youtube: { status: 'none' },
     facebook: { status: shareToFacebook ? 'queued' : 'none' },
     instagram: { status: shareToInstagram ? 'queued' : 'none' },
   };
+}
+
+function normalizeShareTargets(rawTargets, shareToFacebook, shareToInstagram) {
+  const targets = new Set();
+  if (Array.isArray(rawTargets)) {
+    rawTargets.forEach((target) => targets.add(String(target)));
+  } else if (typeof rawTargets === 'string' && rawTargets.trim()) {
+    try {
+      const parsed = JSON.parse(rawTargets);
+      if (Array.isArray(parsed)) {
+        parsed.forEach((target) => targets.add(String(target)));
+      } else {
+        rawTargets
+          .split(',')
+          .map((value) => value.trim())
+          .filter(Boolean)
+          .forEach((target) => targets.add(String(target)));
+      }
+    } catch (err) {
+      rawTargets
+        .split(',')
+        .map((value) => value.trim())
+        .filter(Boolean)
+        .forEach((target) => targets.add(String(target)));
+    }
+  }
+
+  if (shareToFacebook) targets.add('facebook');
+  if (shareToInstagram) targets.add('instagram');
+  return Array.from(targets);
+}
+
+function buildShareStatusFromTargets(targets) {
+  const queued = new Set(targets || []);
+  return {
+    twitter: { status: queued.has('twitter') ? 'pending' : 'none' },
+    tiktok: { status: queued.has('tiktok') ? 'pending' : 'none' },
+    snapchat: { status: queued.has('snapchat') ? 'pending' : 'none' },
+    youtube: { status: queued.has('youtube') ? 'pending' : 'none' },
+    facebook: { status: queued.has('facebook') ? 'pending' : 'none' },
+    instagram: { status: queued.has('instagram') ? 'pending' : 'none' },
+  };
+}
+
+function buildAttemptsFromTargets(targets) {
+  const base = {
+    twitter: 0,
+    tiktok: 0,
+    snapchat: 0,
+    youtube: 0,
+    facebook: 0,
+    instagram: 0,
+  };
+  const selected = new Set(targets || []);
+  Object.keys(base).forEach((key) => {
+    if (!selected.has(key)) {
+      base[key] = 0;
+    }
+  });
+  return base;
 }
 
 async function enforceUblastShareRequirement(userId) {
@@ -100,6 +166,12 @@ async function createPost(req, res) {
 
   const shareToFacebook = Boolean(req.body.shareToFacebook);
   const shareToInstagram = Boolean(req.body.shareToInstagram);
+  const shareTargets = normalizeShareTargets(
+    req.body.shareTargets,
+    shareToFacebook,
+    shareToInstagram,
+  );
+  const user = await User.findById(userId).select('lateAccountId').lean();
 
   try {
     const uploadResult = await uploadMediaBuffer(req.file.buffer, {
@@ -109,10 +181,14 @@ async function createPost(req, res) {
     const isScheduled = Boolean(scheduledForInput);
     const shareStatus = isScheduled
       ? {
+          twitter: { status: 'none' },
+          tiktok: { status: 'none' },
+          snapchat: { status: 'none' },
+          youtube: { status: 'none' },
           facebook: { status: 'none' },
           instagram: { status: 'none' },
         }
-      : scheduleShareStatus(shareToFacebook, shareToInstagram);
+      : buildShareStatusFromTargets(shareTargets);
 
     const created = await Post.create({
       userId,
@@ -124,11 +200,48 @@ async function createPost(req, res) {
       size: req.file.size,
       shareToFacebook,
       shareToInstagram,
+      shareTargets,
       shareStatus,
+      attempts: buildAttemptsFromTargets(shareTargets),
       status: isScheduled ? 'scheduled' : 'published',
       scheduledFor: isScheduled ? scheduledForInput : undefined,
       publishedAt: isScheduled ? undefined : now,
     });
+
+    if (isScheduled && shareTargets.length > 0) {
+      try {
+        const latePost = await lateApi.createPost({
+          content: description || '',
+          mediaUrls: [created.mediaUrl],
+          platforms: shareTargets,
+          scheduledAt: scheduledForInput.toISOString(),
+          lateAccountId: user?.lateAccountId,
+        });
+        await Post.updateOne(
+          { _id: created._id },
+          {
+            $set: {
+              latePostId: latePost.id || latePost.postId,
+              shareStatus: buildShareStatusFromTargets(shareTargets),
+            },
+          },
+        );
+      } catch (err) {
+        console.error('LATE scheduled post error:', err);
+        const failedStatus = {};
+        shareTargets.forEach((platform) => {
+          failedStatus[`shareStatus.${platform}`] = {
+            status: 'failed',
+            error: err.message,
+            updatedAt: new Date(),
+          };
+        });
+        await Post.updateOne(
+          { _id: created._id },
+          { $set: failedStatus },
+        );
+      }
+    }
 
     if (!isScheduled) {
       const profileUpdate = {
@@ -238,6 +351,10 @@ async function sharePost(req, res) {
     shareToFacebook: false,
     shareToInstagram: false,
     shareStatus: {
+      twitter: { status: 'none' },
+      tiktok: { status: 'none' },
+      snapchat: { status: 'none' },
+      youtube: { status: 'none' },
       facebook: { status: 'none' },
       instagram: { status: 'none' },
     },
@@ -336,6 +453,14 @@ async function updateScheduledPost(req, res) {
   }
   if (req.body.shareToInstagram !== undefined) {
     updates.shareToInstagram = Boolean(req.body.shareToInstagram);
+  }
+  if (req.body.shareTargets !== undefined) {
+    updates.shareTargets = normalizeShareTargets(
+      req.body.shareTargets,
+      updates.shareToFacebook ?? false,
+      updates.shareToInstagram ?? false,
+    );
+    updates.shareStatus = buildShareStatusFromTargets(updates.shareTargets);
   }
 
   if (req.file) {
