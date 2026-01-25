@@ -105,8 +105,10 @@ npm start     # production
   - Shares are queued asynchronously (placeholder worker logs for now).
 - `POST /api/posts` optional field `scheduledFor` (ISO8601) to schedule a post for future publishing.
 - `GET /api/posts/scheduled` list the current user's scheduled posts (includes status/publishedAt).
+- `GET /api/posts/mine` list the current user's posts (created + shared) with embedded comments (pagination: `page`, `limit`).
 - `PATCH /api/posts/:postId/scheduled` update a scheduled post (fields: `description?`, `scheduledFor`, `shareTargets?`, optional `media`).
 - `POST /api/posts/:postId/cancel` cancel a scheduled post.
+- `DELETE /api/posts/:postId/cancelled` delete a cancelled scheduled post.
 - `POST /api/posts/:postId/share` creates a new feed post by re-sharing an existing post.
 - `DELETE /api/posts/:postId` delete a post owned by the current user.
 

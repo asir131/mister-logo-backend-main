@@ -10,6 +10,8 @@ const {
   listScheduledPosts,
   updateScheduledPost,
   cancelScheduledPost,
+  deleteCancelledScheduledPost,
+  listMyPosts,
 } = require('../controllers/postController');
 
 const upload = multer({
@@ -50,6 +52,7 @@ router.post(
 );
 
 router.get('/scheduled', authenticate, listScheduledPosts);
+router.get('/mine', authenticate, listMyPosts);
 router.patch(
   '/:postId/scheduled',
   authenticate,
@@ -69,6 +72,7 @@ router.patch(
   updateScheduledPost,
 );
 router.post('/:postId/cancel', authenticate, cancelScheduledPost);
+router.delete('/:postId/cancelled', authenticate, deleteCancelledScheduledPost);
 router.delete('/:postId', authenticate, deletePost);
 router.post('/:postId/share', authenticate, sharePost);
 

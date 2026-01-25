@@ -422,6 +422,7 @@ async function listScheduledPosts(req, res) {
 
   const match = {
     userId,
+    status: 'scheduled',
     scheduledFor: { $exists: true },
   };
 
@@ -534,6 +535,225 @@ async function cancelScheduledPost(req, res) {
   return res.status(200).json({ post: updated });
 }
 
+async function listMyPosts(req, res) {
+  const userId = req.user.id;
+  const viewerId = new mongoose.Types.ObjectId(userId);
+  const page = parsePaging(req.query.page, 1);
+  const limit = parsePaging(req.query.limit, 10, 50);
+  const skip = (page - 1) * limit;
+
+  const match = { userId: viewerId };
+
+  const [totalCount, posts] = await Promise.all([
+    Post.countDocuments(match),
+    Post.aggregate([
+      { $match: match },
+      { $sort: { createdAt: -1 } },
+      { $skip: skip },
+      { $limit: limit },
+      {
+        $lookup: {
+          from: 'users',
+          localField: 'userId',
+          foreignField: '_id',
+          as: 'author',
+        },
+      },
+      { $unwind: '$author' },
+      {
+        $lookup: {
+          from: 'profiles',
+          localField: 'userId',
+          foreignField: 'userId',
+          as: 'profile',
+        },
+      },
+      { $unwind: { path: '$profile', preserveNullAndEmptyArrays: true } },
+      {
+        $lookup: {
+          from: 'likes',
+          let: { postId: '$_id' },
+          pipeline: [
+            { $match: { $expr: { $eq: ['$postId', '$$postId'] } } },
+            { $count: 'count' },
+          ],
+          as: 'likeCounts',
+        },
+      },
+      {
+        $lookup: {
+          from: 'comments',
+          let: { postId: '$_id' },
+          pipeline: [
+            { $match: { $expr: { $eq: ['$postId', '$$postId'] } } },
+            { $count: 'count' },
+          ],
+          as: 'commentCounts',
+        },
+      },
+      {
+        $lookup: {
+          from: 'comments',
+          let: { postId: '$_id' },
+          pipeline: [
+            { $match: { $expr: { $eq: ['$postId', '$$postId'] } } },
+            { $sort: { createdAt: -1 } },
+            {
+              $lookup: {
+                from: 'users',
+                localField: 'userId',
+                foreignField: '_id',
+                as: 'user',
+              },
+            },
+            { $unwind: '$user' },
+            {
+              $lookup: {
+                from: 'profiles',
+                localField: 'userId',
+                foreignField: 'userId',
+                as: 'profile',
+              },
+            },
+            { $unwind: { path: '$profile', preserveNullAndEmptyArrays: true } },
+            {
+              $project: {
+                _id: 1,
+                text: 1,
+                createdAt: 1,
+                user: {
+                  id: '$user._id',
+                  name: '$user.name',
+                  email: '$user.email',
+                },
+                profile: {
+                  username: '$profile.username',
+                  displayName: '$profile.displayName',
+                  profileImageUrl: '$profile.profileImageUrl',
+                },
+              },
+            },
+          ],
+          as: 'comments',
+        },
+      },
+      {
+        $lookup: {
+          from: 'likes',
+          let: { postId: '$_id', viewerId },
+          pipeline: [
+            {
+              $match: {
+                $expr: {
+                  $and: [
+                    { $eq: ['$postId', '$$postId'] },
+                    { $eq: ['$userId', '$$viewerId'] },
+                  ],
+                },
+              },
+            },
+            { $limit: 1 },
+          ],
+          as: 'viewerLike',
+        },
+      },
+      {
+        $lookup: {
+          from: 'savedposts',
+          let: { postId: '$_id', viewerId },
+          pipeline: [
+            {
+              $match: {
+                $expr: {
+                  $and: [
+                    { $eq: ['$postId', '$$postId'] },
+                    { $eq: ['$userId', '$$viewerId'] },
+                  ],
+                },
+              },
+            },
+            { $limit: 1 },
+          ],
+          as: 'viewerSaved',
+        },
+      },
+      {
+        $addFields: {
+          likeCount: {
+            $ifNull: [{ $arrayElemAt: ['$likeCounts.count', 0] }, 0],
+          },
+          commentCount: {
+            $ifNull: [{ $arrayElemAt: ['$commentCounts.count', 0] }, 0],
+          },
+          viewerHasLiked: { $gt: [{ $size: '$viewerLike' }, 0] },
+          viewerIsFollowing: false,
+          viewerHasSaved: { $gt: [{ $size: '$viewerSaved' }, 0] },
+          isShared: { $cond: [{ $ifNull: ['$sharedFromPostId', false] }, true, false] },
+        },
+      },
+      {
+        $project: {
+          description: 1,
+          mediaType: 1,
+          mediaUrl: 1,
+          ublastId: 1,
+          sharedFromPostId: 1,
+          createdAt: 1,
+          status: 1,
+          isShared: 1,
+          likeCount: 1,
+          commentCount: 1,
+          viewerHasLiked: 1,
+          viewerIsFollowing: 1,
+          viewerHasSaved: 1,
+          comments: 1,
+          author: {
+            id: '$author._id',
+            name: '$author.name',
+            email: '$author.email',
+          },
+          profile: {
+            username: '$profile.username',
+            displayName: '$profile.displayName',
+            role: '$profile.role',
+            profileImageUrl: '$profile.profileImageUrl',
+          },
+        },
+      },
+    ]),
+  ]);
+
+  const totalPages = Math.max(1, Math.ceil(totalCount / limit));
+
+  return res.status(200).json({
+    posts,
+    page,
+    totalPages,
+    totalCount,
+  });
+}
+
+async function deleteCancelledScheduledPost(req, res) {
+  const userId = req.user.id;
+  const { postId } = req.params;
+
+  if (!mongoose.isValidObjectId(postId)) {
+    return res.status(400).json({ error: 'Invalid post id.' });
+  }
+
+  const deleted = await Post.findOneAndDelete({
+    _id: postId,
+    userId,
+    status: 'cancelled',
+  });
+
+  if (!deleted) {
+    return res.status(404).json({ error: 'Cancelled scheduled post not found.' });
+  }
+
+  return res.status(200).json({ message: 'Cancelled scheduled post deleted.' });
+}
+
 module.exports = {
   createPost,
   deletePost,
@@ -541,4 +761,6 @@ module.exports = {
   listScheduledPosts,
   updateScheduledPost,
   cancelScheduledPost,
+  deleteCancelledScheduledPost,
+  listMyPosts,
 };

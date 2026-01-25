@@ -23,6 +23,7 @@ export default function PostCard({
   onToggleLike,
   onToggleSave,
   onSharePost,
+  onDelete,
   commentsState,
   onLoadComments,
   onAddComment,
@@ -91,14 +92,18 @@ export default function PostCard({
 
       <div className="post-actions">
         <button className="btn ghost" type="button" onClick={() => onToggleLike(post)}>
-          {post.viewerHasLiked ? "Unlike" : "Like"} Aú {post.likeCount}
+          {post.viewerHasLiked ? "Unlike" : "Like"} - {post.likeCount}
         </button>
         {onSharePost && (
           <button className="btn ghost" type="button" onClick={() => onSharePost(post)}>
             Share to Feed
           </button>
         )}
-
+        {onDelete && (
+          <button className="btn ghost" type="button" onClick={() => onDelete(post)}>
+            Delete
+          </button>
+        )}
         {onToggleSave && (
           <button
             className="btn ghost"
@@ -109,7 +114,7 @@ export default function PostCard({
           </button>
         )}
         <button className="btn ghost" type="button" onClick={() => onLoadComments(post)}>
-          Comments Aú {post.commentCount}
+          Comments - {post.commentCount}
         </button>
         <span className="post-time">{formatTime(post.createdAt)}</span>
       </div>
