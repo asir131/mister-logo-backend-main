@@ -330,6 +330,149 @@ async function deletePost(req, res) {
   return res.status(200).json({ message: 'Post deleted.' });
 }
 
+async function updatePost(req, res) {
+  const validationError = handleValidation(req, res);
+  if (validationError !== null) return;
+
+  const { id: userId } = req.user;
+  const { postId } = req.params;
+
+  if (!mongoose.isValidObjectId(postId)) {
+    return res.status(400).json({ error: 'Invalid post id.' });
+  }
+
+  if (req.body.scheduledFor) {
+    return res.status(400).json({ error: 'Use scheduled edit for scheduled posts.' });
+  }
+
+  const post = await Post.findOne({ _id: postId, userId });
+  if (!post) {
+    return res.status(404).json({ error: 'Post not found.' });
+  }
+
+  if (post.status === 'scheduled') {
+    return res.status(400).json({ error: 'Use scheduled edit for scheduled posts.' });
+  }
+
+  const updates = {};
+  if (req.body.description !== undefined) {
+    updates.description = req.body.description;
+  }
+  if (req.body.shareToFacebook !== undefined) {
+    updates.shareToFacebook = Boolean(req.body.shareToFacebook);
+  }
+  if (req.body.shareToInstagram !== undefined) {
+    updates.shareToInstagram = Boolean(req.body.shareToInstagram);
+  }
+
+  const shouldUpdateTargets =
+    req.body.shareTargets !== undefined ||
+    req.body.shareToFacebook !== undefined ||
+    req.body.shareToInstagram !== undefined;
+  if (shouldUpdateTargets) {
+    const shareTargets = normalizeShareTargets(
+      req.body.shareTargets ?? post.shareTargets,
+      updates.shareToFacebook ?? post.shareToFacebook,
+      updates.shareToInstagram ?? post.shareToInstagram,
+    );
+    updates.shareTargets = shareTargets;
+    updates.shareStatus = buildShareStatusFromTargets(shareTargets);
+    updates.attempts = buildAttemptsFromTargets(shareTargets);
+  }
+
+  if (req.file) {
+    const mediaType = detectMediaType(req.file.mimetype);
+    if (!mediaType) {
+      return res.status(400).json({ error: 'Unsupported media type.' });
+    }
+    try {
+      const uploadResult = await uploadMediaBuffer(req.file.buffer, {
+        folder: 'mister/posts',
+      });
+      updates.mediaType = mediaType;
+      updates.mediaUrl = uploadResult.secure_url || uploadResult.url;
+      updates.mediaPublicId = uploadResult.public_id;
+      updates.mimeType = req.file.mimetype;
+      updates.size = req.file.size;
+    } catch (err) {
+      console.error('Update post upload error:', err);
+      return res.status(500).json({ error: 'Could not upload media.' });
+    }
+  }
+
+  if (Object.keys(updates).length === 0) {
+    return res.status(400).json({ error: 'No changes provided.' });
+  }
+
+  const previousMediaType = post.mediaType;
+  const previousMediaUrl = post.mediaUrl;
+
+  post.set(updates);
+  await post.save();
+
+  if (post.status === 'published' || !post.status) {
+    const profileUpdates = [];
+    const newMediaType = updates.mediaType || previousMediaType;
+    const newMediaUrl = updates.mediaUrl || previousMediaUrl;
+
+    if (updates.mediaUrl) {
+      const inc = {};
+      if (previousMediaType && newMediaType && previousMediaType !== newMediaType) {
+        inc[`${previousMediaType}Count`] = -1;
+        inc[`${newMediaType}Count`] = 1;
+      }
+
+      profileUpdates.push(
+        Profile.updateOne(
+          { userId },
+          {
+            $pull: {
+              [`${previousMediaType}Posts`]: { postId: post._id },
+            },
+          },
+        ),
+      );
+
+      const pushPayload = {
+        $push: {
+          [`${newMediaType}Posts`]: {
+            postId: post._id,
+            mediaUrl: newMediaUrl,
+            description: post.description,
+            createdAt: post.createdAt,
+          },
+        },
+      };
+      if (Object.keys(inc).length) {
+        pushPayload.$inc = inc;
+      }
+      profileUpdates.push(Profile.updateOne({ userId }, pushPayload));
+    } else if (updates.description !== undefined && newMediaType) {
+      profileUpdates.push(
+        Profile.updateOne(
+          { userId },
+          {
+            $set: {
+              [`${newMediaType}Posts.$[entry].description`]: post.description,
+            },
+          },
+          { arrayFilters: [{ 'entry.postId': post._id }] },
+        ),
+      );
+    }
+
+    if (profileUpdates.length) {
+      await Promise.all(profileUpdates);
+    }
+  }
+
+  if (updates.shareTargets && post.status !== 'scheduled') {
+    enqueuePostShare(post);
+  }
+
+  return res.status(200).json({ post });
+}
+
 async function sharePost(req, res) {
   const { id: userId } = req.user;
   const { postId } = req.params;
@@ -757,6 +900,7 @@ async function deleteCancelledScheduledPost(req, res) {
 module.exports = {
   createPost,
   deletePost,
+  updatePost,
   sharePost,
   listScheduledPosts,
   updateScheduledPost,

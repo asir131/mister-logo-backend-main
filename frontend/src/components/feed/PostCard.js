@@ -24,6 +24,7 @@ export default function PostCard({
   onToggleSave,
   onSharePost,
   onDelete,
+  onEdit,
   commentsState,
   onLoadComments,
   onAddComment,
@@ -102,6 +103,11 @@ export default function PostCard({
         {onDelete && (
           <button className="btn ghost" type="button" onClick={() => onDelete(post)}>
             Delete
+          </button>
+        )}
+        {onEdit && (
+          <button className="btn ghost" type="button" onClick={() => onEdit(post)}>
+            Edit
           </button>
         )}
         {onToggleSave && (

@@ -6,6 +6,7 @@ const authenticate = require('../middleware/auth');
 const {
   createPost,
   deletePost,
+  updatePost,
   sharePost,
   listScheduledPosts,
   updateScheduledPost,
@@ -51,6 +52,20 @@ router.post(
   createPost,
 );
 
+router.patch(
+  '/:postId',
+  authenticate,
+  upload.single('media'),
+  [
+    body('description').optional({ nullable: true }).trim(),
+    body('shareToFacebook').optional({ nullable: true }).isBoolean().toBoolean(),
+    body('shareToInstagram').optional({ nullable: true }).isBoolean().toBoolean(),
+    body('shareTargets')
+      .optional({ nullable: true })
+      .custom((value) => typeof value === 'string' || Array.isArray(value)),
+  ],
+  updatePost,
+);
 router.get('/scheduled', authenticate, listScheduledPosts);
 router.get('/mine', authenticate, listMyPosts);
 router.patch(
