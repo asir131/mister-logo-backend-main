@@ -8,6 +8,7 @@ import CreatePostForm from "../../components/forms/CreatePostForm";
 import PostCard from "../../components/feed/PostCard";
 import { apiRequest } from "../../lib/apiClient";
 import { clearAuth, getAuth, getProfile } from "../../lib/authStore";
+import { openFacebookShare, openInstagramShare } from "../../lib/shareDialogs";
 
 const emptyPost = {
   description: "",
@@ -175,6 +176,14 @@ export default function FeedPage() {
     loadFeed(1, true);
   }
 
+  function handleShareFacebook(post) {
+    openFacebookShare(post);
+  }
+
+  function handleShareInstagram(post) {
+    openInstagramShare(post);
+  }
+
   async function handleLoadComments(post, page = 1) {
     if (!auth.token) return;
     setCommentsByPost((prev) => ({
@@ -290,6 +299,8 @@ export default function FeedPage() {
           onToggleLike={handleToggleLike}
           onToggleSave={handleToggleSave}
           onSharePost={handleSharePost}
+          onShareFacebook={handleShareFacebook}
+          onShareInstagram={handleShareInstagram}
           commentsState={commentsByPost[post._id]}
           onLoadComments={handleLoadComments}
           onAddComment={handleAddComment}

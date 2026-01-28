@@ -23,6 +23,8 @@ export default function PostCard({
   onToggleLike,
   onToggleSave,
   onSharePost,
+  onShareFacebook,
+  onShareInstagram,
   onDelete,
   onEdit,
   commentsState,
@@ -98,6 +100,24 @@ export default function PostCard({
         {onSharePost && (
           <button className="btn ghost" type="button" onClick={() => onSharePost(post)}>
             Share to Feed
+          </button>
+        )}
+        {onShareFacebook && (
+          <button
+            className="btn ghost"
+            type="button"
+            onClick={() => onShareFacebook(post)}
+          >
+            Share to Facebook
+          </button>
+        )}
+        {onShareInstagram && (
+          <button
+            className="btn ghost"
+            type="button"
+            onClick={() => onShareInstagram(post)}
+          >
+            Share to Instagram
           </button>
         )}
         {onDelete && (

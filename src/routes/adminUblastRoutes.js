@@ -14,6 +14,11 @@ const {
   deleteManualPlacement,
   updateManualPlacement,
 } = require('../controllers/adminUblastController');
+const {
+  listUsers,
+  restrictUser,
+  unrestrictUser,
+} = require('../controllers/adminUserController');
 const { getTrending } = require('../controllers/trendingController');
 
 const upload = multer({
@@ -68,5 +73,9 @@ router.patch(
   updateManualPlacement,
 );
 router.delete('/trending/manual/:placementId', deleteManualPlacement);
+
+router.get('/users', listUsers);
+router.patch('/users/:userId/restrict', restrictUser);
+router.patch('/users/:userId/unrestrict', unrestrictUser);
 
 module.exports = router;

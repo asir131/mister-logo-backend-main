@@ -180,6 +180,9 @@ All admin routes accept either `Authorization: Bearer <token>` or `x-admin-key: 
 - `POST /api/admin/trending/manual` body: `{ postId, position?, startAt?, endAt? }`.
 - `PATCH /api/admin/trending/manual/:placementId` body: `{ position }` update manual pin position (swaps if occupied).
 - `DELETE /api/admin/trending/manual/:placementId` remove manual placement.
+- `GET /api/admin/users` list users for moderation (pagination: `page`, `limit`).
+- `PATCH /api/admin/users/:userId/restrict` manually block a user from sharing UBlasts.
+- `PATCH /api/admin/users/:userId/unrestrict` manually unblock a user from sharing UBlasts.
 
 ## Notes
 

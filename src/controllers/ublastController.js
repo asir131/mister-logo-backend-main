@@ -32,13 +32,14 @@ function isBlockedUntil(dateValue) {
 function isUserIneligible(user) {
   if (!user) return true;
   if (user.isBlocked || user.isBanned) return true;
+  if (user.ublastManualBlocked) return true;
   if (isBlockedUntil(user.ublastBlockedUntil)) return true;
   return false;
 }
 
 async function getEligibility(req, res) {
   const user = await User.findById(req.user.id)
-    .select('ublastBlockedUntil isBlocked isBanned')
+    .select('ublastBlockedUntil ublastManualBlocked isBlocked isBanned')
     .lean();
   if (!user) {
     return res.status(404).json({ error: 'User not found.' });
