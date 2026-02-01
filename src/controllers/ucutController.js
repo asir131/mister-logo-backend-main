@@ -1,6 +1,14 @@
 const { validationResult } = require('express-validator');
 
+const mongoose = require('mongoose');
 const Ucut = require('../models/Ucut');
+const UcutLike = require('../models/UcutLike');
+const UcutComment = require('../models/UcutComment');
+const Follow = require('../models/Follow');
+const Profile = require('../models/Profile');
+const User = require('../models/User');
+const Conversation = require('../models/Conversation');
+const Message = require('../models/Message');
 const { uploadMediaBuffer } = require('../services/cloudinary');
 const { splitMedia, DEFAULT_SEGMENT_SECONDS } = require('../services/mediaSplit');
 
@@ -23,6 +31,39 @@ function detectMediaType(mimetype) {
 function buildExpiryDate() {
   const hours = Number(process.env.UCUT_EXPIRES_HOURS || 24);
   return new Date(Date.now() + hours * 60 * 60 * 1000);
+}
+
+function makePairKey(a, b) {
+  const [first, second] = [a.toString(), b.toString()].sort();
+  return `${first}:${second}`;
+}
+
+async function ensureMutualFollow(userId, otherUserId) {
+  const [follows, followedBy] = await Promise.all([
+    Follow.exists({ followerId: userId, followingId: otherUserId }),
+    Follow.exists({ followerId: otherUserId, followingId: userId }),
+  ]);
+  return Boolean(follows && followedBy);
+}
+
+async function canViewUcut(viewerId, ownerId) {
+  if (viewerId.toString() === ownerId.toString()) return true;
+  const follows = await Follow.exists({
+    followerId: viewerId,
+    followingId: ownerId,
+  });
+  return Boolean(follows);
+}
+
+function activeUcutFilter() {
+  return { $or: [{ expiresAt: null }, { expiresAt: { $gt: new Date() } }] };
+}
+
+function parsePaging(value, fallback, max) {
+  const parsed = Number.parseInt(value, 10);
+  if (Number.isNaN(parsed) || parsed <= 0) return fallback;
+  if (max) return Math.min(parsed, max);
+  return parsed;
 }
 
 async function createUcut(req, res) {
@@ -132,7 +173,7 @@ async function listMyUcuts(req, res) {
   const userId = req.user.id;
   const ucuts = await Ucut.find({
     userId,
-    $or: [{ expiresAt: null }, { expiresAt: { $gt: new Date() } }],
+    ...activeUcutFilter(),
   })
     .sort({ createdAt: -1 })
     .limit(100)
@@ -140,7 +181,295 @@ async function listMyUcuts(req, res) {
   return res.status(200).json({ ucuts });
 }
 
+async function listFeed(req, res) {
+  const viewerId = req.user.id;
+  const following = await Follow.find({ followerId: viewerId })
+    .select('followingId')
+    .lean();
+  const followingIds = following.map((entry) => entry.followingId);
+  const ownerIdsQuery = Array.from(
+    new Set([viewerId.toString(), ...followingIds.map((id) => id.toString())]),
+  );
+
+  const page = parsePaging(req.query.page, 1);
+  const limit = parsePaging(req.query.limit, 20, 100);
+  const skip = (page - 1) * limit;
+
+  const match = {
+    userId: { $in: ownerIdsQuery },
+    ...activeUcutFilter(),
+  };
+
+  const [totalCount, ucuts] = await Promise.all([
+    Ucut.countDocuments(match),
+    Ucut.find(match)
+      .sort({ createdAt: -1 })
+      .skip(skip)
+      .limit(limit)
+      .lean(),
+  ]);
+
+  const ucutIds = ucuts.map((ucut) => ucut._id);
+  const ownerIds = Array.from(new Set(ucuts.map((ucut) => ucut.userId.toString())));
+  const [users, profiles, followBacks] = await Promise.all([
+    User.find({ _id: { $in: ownerIds } })
+      .select('name')
+      .lean(),
+    Profile.find({ userId: { $in: ownerIds } })
+      .select('userId displayName username profileImageUrl')
+      .lean(),
+    Follow.find({ followerId: { $in: ownerIds }, followingId: viewerId })
+      .select('followerId')
+      .lean(),
+  ]);
+
+  const userById = new Map(users.map((user) => [user._id.toString(), user]));
+  const profileById = new Map(
+    profiles.map((profile) => [profile.userId.toString(), profile]),
+  );
+  const followBackSet = new Set(followBacks.map((entry) => entry.followerId.toString()));
+  const [likeCounts, commentCounts, viewerLikes] = await Promise.all([
+    UcutLike.aggregate([
+      { $match: { ucutId: { $in: ucutIds } } },
+      { $group: { _id: '$ucutId', count: { $sum: 1 } } },
+    ]),
+    UcutComment.aggregate([
+      { $match: { ucutId: { $in: ucutIds } } },
+      { $group: { _id: '$ucutId', count: { $sum: 1 } } },
+    ]),
+    UcutLike.find({ ucutId: { $in: ucutIds }, userId: viewerId })
+      .select('ucutId')
+      .lean(),
+  ]);
+
+  const likeById = new Map(likeCounts.map((item) => [item._id.toString(), item.count]));
+  const commentById = new Map(commentCounts.map((item) => [item._id.toString(), item.count]));
+  const viewerLikeSet = new Set(viewerLikes.map((entry) => entry.ucutId.toString()));
+
+  const enriched = ucuts.map((ucut) => {
+    const ownerId = ucut.userId.toString();
+    const user = userById.get(ownerId);
+    const profile = profileById.get(ownerId);
+    const canComment = followBackSet.has(ownerId);
+
+    return {
+      ...ucut,
+      likeCount: likeById.get(ucut._id.toString()) || 0,
+      commentCount: commentById.get(ucut._id.toString()) || 0,
+      viewerHasLiked: viewerLikeSet.has(ucut._id.toString()),
+      canComment,
+      owner: {
+        id: ownerId,
+        name: profile?.displayName || profile?.username || user?.name || 'Unknown',
+        username: profile?.username || '',
+        profileImageUrl: profile?.profileImageUrl || null,
+      },
+    };
+  });
+
+  const totalPages = Math.max(1, Math.ceil(totalCount / limit));
+  return res.status(200).json({
+    ucuts: enriched,
+    page,
+    totalPages,
+    totalCount,
+  });
+}
+
+async function likeUcut(req, res) {
+  const userId = req.user.id;
+  const { ucutId } = req.params;
+
+  if (!mongoose.isValidObjectId(ucutId)) {
+    return res.status(400).json({ error: 'Invalid UCut id.' });
+  }
+
+  const ucut = await Ucut.findOne({ _id: ucutId, ...activeUcutFilter() }).lean();
+  if (!ucut) {
+    return res.status(404).json({ error: 'UCut not found.' });
+  }
+
+  if (ucut.userId.toString() === userId.toString()) {
+    return res.status(403).json({ error: 'You cannot like your own UCut.' });
+  }
+
+  const canView = await canViewUcut(userId, ucut.userId);
+  if (!canView) {
+    return res.status(403).json({ error: 'Not allowed to view this UCut.' });
+  }
+
+  await UcutLike.updateOne(
+    { ucutId, userId },
+    { $setOnInsert: { ucutId, userId } },
+    { upsert: true },
+  );
+
+  return res.status(200).json({ liked: true });
+}
+
+async function unlikeUcut(req, res) {
+  const userId = req.user.id;
+  const { ucutId } = req.params;
+
+  if (!mongoose.isValidObjectId(ucutId)) {
+    return res.status(400).json({ error: 'Invalid UCut id.' });
+  }
+
+  await UcutLike.deleteOne({ ucutId, userId });
+  return res.status(200).json({ liked: false });
+}
+
+async function listComments(req, res) {
+  const userId = req.user.id;
+  const { ucutId } = req.params;
+
+  if (!mongoose.isValidObjectId(ucutId)) {
+    return res.status(400).json({ error: 'Invalid UCut id.' });
+  }
+
+  const ucut = await Ucut.findOne({ _id: ucutId, ...activeUcutFilter() }).lean();
+  if (!ucut) {
+    return res.status(404).json({ error: 'UCut not found.' });
+  }
+
+  const canView = await canViewUcut(userId, ucut.userId);
+  if (!canView) {
+    return res.status(403).json({ error: 'Not allowed to view this UCut.' });
+  }
+
+  const page = parsePaging(req.query.page, 1);
+  const limit = parsePaging(req.query.limit, 20, 100);
+  const skip = (page - 1) * limit;
+
+  const [totalCount, comments] = await Promise.all([
+    UcutComment.countDocuments({ ucutId }),
+    UcutComment.find({ ucutId })
+      .sort({ createdAt: -1 })
+      .skip(skip)
+      .limit(limit)
+      .lean(),
+  ]);
+
+  const totalPages = Math.max(1, Math.ceil(totalCount / limit));
+  return res.status(200).json({
+    comments,
+    page,
+    totalPages,
+    totalCount,
+  });
+}
+
+async function addComment(req, res) {
+  const userId = req.user.id;
+  const { ucutId } = req.params;
+  const text = typeof req.body?.text === 'string' ? req.body.text.trim() : '';
+
+  if (!mongoose.isValidObjectId(ucutId)) {
+    return res.status(400).json({ error: 'Invalid UCut id.' });
+  }
+
+  if (!text) {
+    return res.status(400).json({ error: 'Comment text is required.' });
+  }
+
+  const ucut = await Ucut.findOne({ _id: ucutId, ...activeUcutFilter() }).lean();
+  if (!ucut) {
+    return res.status(404).json({ error: 'UCut not found.' });
+  }
+
+  if (ucut.userId.toString() === userId.toString()) {
+    return res.status(403).json({ error: 'You cannot comment on your own UCut.' });
+  }
+
+  const canView = await canViewUcut(userId, ucut.userId);
+  if (!canView) {
+    return res.status(403).json({ error: 'Not allowed to view this UCut.' });
+  }
+
+  const mutual = await ensureMutualFollow(userId, ucut.userId);
+  if (!mutual) {
+    return res.status(403).json({ error: 'Comments require mutual follow.' });
+  }
+
+  const comment = await UcutComment.create({
+    ucutId,
+    userId,
+    text,
+  });
+
+  const pairKey = makePairKey(userId, ucut.userId);
+  const conversation = await Conversation.findOneAndUpdate(
+    { pairKey },
+    {
+      $setOnInsert: {
+        pairKey,
+        participants: [userId, ucut.userId],
+      },
+    },
+    { new: true, upsert: true },
+  );
+
+  const message = await Message.create({
+    conversationId: conversation._id,
+    senderId: userId,
+    recipientId: ucut.userId,
+    text: `UCut comment: ${text}`,
+  });
+
+  const lastMessage = {
+    senderId: userId,
+    text: message.text,
+    createdAt: message.createdAt,
+  };
+
+  await Conversation.updateOne(
+    { _id: conversation._id },
+    { $set: { lastMessage }, $currentDate: { updatedAt: true } },
+  );
+
+  const io = req.app.get('io');
+  if (io) {
+    io.to(`user:${userId}`).emit('message:new', {
+      conversationId: conversation._id,
+      message,
+    });
+    io.to(`user:${ucut.userId}`).emit('message:new', {
+      conversationId: conversation._id,
+      message,
+    });
+  }
+
+  return res.status(201).json({ comment });
+}
+
+async function deleteUcut(req, res) {
+  const userId = req.user.id;
+  const { ucutId } = req.params;
+
+  if (!mongoose.isValidObjectId(ucutId)) {
+    return res.status(400).json({ error: 'Invalid UCut id.' });
+  }
+
+  const deleted = await Ucut.findOneAndDelete({ _id: ucutId, userId });
+  if (!deleted) {
+    return res.status(404).json({ error: 'UCut not found.' });
+  }
+
+  await Promise.all([
+    UcutLike.deleteMany({ ucutId }),
+    UcutComment.deleteMany({ ucutId }),
+  ]);
+
+  return res.status(200).json({ deleted: true });
+}
+
 module.exports = {
   createUcut,
   listMyUcuts,
+  listFeed,
+  likeUcut,
+  unlikeUcut,
+  listComments,
+  addComment,
+  deleteUcut,
 };

@@ -658,6 +658,156 @@ textarea {
   background: rgba(255, 255, 255, 0.12);
 }
 
+.story-strip {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: minmax(140px, 180px);
+  gap: 14px;
+  overflow-x: auto;
+  padding-bottom: 6px;
+}
+
+.story-card {
+  display: grid;
+  gap: 8px;
+  border: none;
+  background: transparent;
+  text-align: left;
+  padding: 0;
+}
+
+.story-media {
+  border-radius: 16px;
+  background: rgba(18, 17, 23, 0.08);
+  min-height: 160px;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+}
+
+.story-media img,
+.story-media video {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.story-media audio {
+  width: 100%;
+}
+
+.story-text {
+  padding: 12px;
+  font-size: 0.9rem;
+  color: var(--ink);
+}
+
+.story-text.big {
+  font-size: 1.1rem;
+  color: var(--ink);
+  padding: 18px;
+  text-align: center;
+}
+
+.story-meta {
+  font-size: 0.75rem;
+  color: var(--muted);
+  word-break: break-all;
+}
+
+.story-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  display: grid;
+  place-items: center;
+}
+
+.story-modal-backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(10, 10, 14, 0.6);
+}
+
+.story-modal-content {
+  position: relative;
+  z-index: 1;
+  width: min(980px, 92vw);
+  background: var(--card);
+  border-radius: 20px;
+  border: 1px solid var(--border);
+  padding: 20px;
+  display: grid;
+  gap: 14px;
+  box-shadow: var(--shadow);
+}
+
+.story-modal-header {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: center;
+}
+
+.story-owner {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.story-owner img {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  object-fit: cover;
+}
+
+.story-modal-body {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: 12px;
+}
+
+.story-stage {
+  border-radius: 16px;
+  background: rgba(18, 17, 23, 0.08);
+  min-height: 360px;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+}
+
+.story-stage img,
+.story-stage video {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.story-stage audio {
+  width: 100%;
+}
+
+.story-nav {
+  border: 1px solid var(--border);
+  background: rgba(255, 255, 255, 0.7);
+  border-radius: 999px;
+  padding: 10px 14px;
+  cursor: pointer;
+}
+
+.story-modal-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.story-modal-comments {
+  display: grid;
+  gap: 12px;
+}
+
 .badge {
   display: inline-flex;
   align-items: center;

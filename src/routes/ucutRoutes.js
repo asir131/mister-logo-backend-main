@@ -3,7 +3,16 @@ const { body } = require('express-validator');
 const multer = require('multer');
 
 const authenticate = require('../middleware/auth');
-const { createUcut, listMyUcuts } = require('../controllers/ucutController');
+const {
+  createUcut,
+  listMyUcuts,
+  listFeed,
+  likeUcut,
+  unlikeUcut,
+  listComments,
+  addComment,
+  deleteUcut,
+} = require('../controllers/ucutController');
 
 const upload = multer({
   storage: multer.memoryStorage(),
@@ -32,5 +41,11 @@ router.post(
 );
 
 router.get('/mine', authenticate, listMyUcuts);
+router.get('/feed', authenticate, listFeed);
+router.post('/:ucutId/like', authenticate, likeUcut);
+router.delete('/:ucutId/like', authenticate, unlikeUcut);
+router.get('/:ucutId/comments', authenticate, listComments);
+router.post('/:ucutId/comments', authenticate, addComment);
+router.delete('/:ucutId', authenticate, deleteUcut);
 
 module.exports = router;
