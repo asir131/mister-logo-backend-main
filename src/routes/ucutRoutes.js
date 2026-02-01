@@ -1,0 +1,36 @@
+const express = require('express');
+const { body } = require('express-validator');
+const multer = require('multer');
+
+const authenticate = require('../middleware/auth');
+const { createUcut, listMyUcuts } = require('../controllers/ucutController');
+
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 100 * 1024 * 1024 },
+  fileFilter: (req, file, cb) => {
+    const isImage = file.mimetype.startsWith('image/');
+    const isVideo = file.mimetype.startsWith('video/');
+    const isAudio = file.mimetype.startsWith('audio/');
+    if (!isImage && !isVideo && !isAudio) {
+      const err = new Error('Only image, video, or audio uploads are allowed.');
+      err.status = 400;
+      return cb(err);
+    }
+    return cb(null, true);
+  },
+});
+
+const router = express.Router();
+
+router.post(
+  '/',
+  authenticate,
+  upload.single('media'),
+  [body('text').optional({ nullable: true }).isString()],
+  createUcut,
+);
+
+router.get('/mine', authenticate, listMyUcuts);
+
+module.exports = router;

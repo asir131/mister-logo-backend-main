@@ -29,6 +29,12 @@ function detectMediaType(mimetype) {
   return null;
 }
 
+function resolveUploadResourceType(mediaType) {
+  if (mediaType === 'image') return 'image';
+  if (mediaType === 'video' || mediaType === 'audio') return 'video';
+  return 'auto';
+}
+
 function parseScheduledFor(value) {
   if (!value) return null;
   const parsed = new Date(value);
@@ -175,8 +181,14 @@ async function createPost(req, res) {
   const user = await User.findById(userId).select('lateAccountId').lean();
 
   try {
+    console.log('Post upload:', {
+      mimetype: req.file.mimetype,
+      mediaType,
+      resourceType: resolveUploadResourceType(mediaType),
+    });
     const uploadResult = await uploadMediaBuffer(req.file.buffer, {
       folder: 'mister/posts',
+      resource_type: resolveUploadResourceType(mediaType),
     });
 
     const isScheduled = Boolean(scheduledForInput);
@@ -388,6 +400,7 @@ async function updatePost(req, res) {
     try {
       const uploadResult = await uploadMediaBuffer(req.file.buffer, {
         folder: 'mister/posts',
+        resource_type: resolveUploadResourceType(mediaType),
       });
       updates.mediaType = mediaType;
       updates.mediaUrl = uploadResult.secure_url || uploadResult.url;
@@ -645,6 +658,7 @@ async function updateScheduledPost(req, res) {
     }
     const uploadResult = await uploadMediaBuffer(req.file.buffer, {
       folder: 'mister/posts',
+      resource_type: resolveUploadResourceType(mediaType),
     });
     updates.mediaType = mediaType;
     updates.mediaUrl = uploadResult.secure_url || uploadResult.url;
