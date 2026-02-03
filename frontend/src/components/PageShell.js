@@ -91,6 +91,9 @@ export default function PageShell({ title, subtitle, actions, children }) {
           <Link className="btn ghost" href="/ucuts">
             UCuts
           </Link>
+          <Link className="btn ghost" href="/uclips">
+            UClips
+          </Link>
           <Link className="btn ghost" href="/ublast">
             UBlast
           </Link>

@@ -19,6 +19,7 @@ async function getFeed(req, res) {
     $and: [
       { $or: [{ status: 'published' }, { status: { $exists: false } }] },
       { $or: [{ isApproved: true }, { isApproved: { $exists: false } }] },
+      { postType: { $ne: 'uclip' } },
     ],
   };
 

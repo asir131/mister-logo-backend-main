@@ -13,6 +13,7 @@ const {
   cancelScheduledPost,
   deleteCancelledScheduledPost,
   listMyPosts,
+  listUclips,
 } = require('../controllers/postController');
 
 const upload = multer({
@@ -46,6 +47,10 @@ router.post(
       .optional({ nullable: true })
       .isIn(['image', 'video', 'audio'])
       .withMessage('mediaType must be image, video, or audio'),
+    body('postType')
+      .optional({ nullable: true })
+      .isIn(['upost', 'uclip', 'ushare', 'ublast'])
+      .withMessage('postType must be upost, uclip, ushare, or ublast'),
     body('shareTargets')
       .optional({ nullable: true })
       .custom((value) => typeof value === 'string' || Array.isArray(value)),
@@ -68,11 +73,16 @@ router.patch(
     body('shareTargets')
       .optional({ nullable: true })
       .custom((value) => typeof value === 'string' || Array.isArray(value)),
+    body('postType')
+      .optional({ nullable: true })
+      .isIn(['upost', 'uclip', 'ushare', 'ublast'])
+      .withMessage('postType must be upost, uclip, ushare, or ublast'),
   ],
   updatePost,
 );
 router.get('/scheduled', authenticate, listScheduledPosts);
 router.get('/mine', authenticate, listMyPosts);
+router.get('/uclips', authenticate, listUclips);
 router.patch(
   '/:postId/scheduled',
   authenticate,

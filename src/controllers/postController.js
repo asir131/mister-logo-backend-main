@@ -29,6 +29,15 @@ function detectMediaType(mimetype) {
   return null;
 }
 
+function normalizePostType(value) {
+  if (!value) return 'upost';
+  const normalized = String(value).toLowerCase();
+  if (['upost', 'uclip', 'ushare', 'ublast'].includes(normalized)) {
+    return normalized;
+  }
+  return null;
+}
+
 function resolveUploadResourceType(mediaType) {
   if (mediaType === 'image') return 'image';
   if (mediaType === 'video' || mediaType === 'audio') return 'video';
@@ -146,6 +155,7 @@ async function createPost(req, res) {
   const scheduledForRaw = req.body.scheduledFor;
   const scheduledForInput = parseScheduledFor(scheduledForRaw);
   const now = new Date();
+  const postType = normalizePostType(req.body.postType);
 
   if (scheduledForRaw && !scheduledForInput) {
     return res.status(400).json({ error: 'scheduledFor must be a valid date.' });
@@ -162,6 +172,10 @@ async function createPost(req, res) {
     }
   }
 
+  if (!postType) {
+    return res.status(400).json({ error: 'postType must be upost, uclip, ushare, or ublast.' });
+  }
+
   const hasFile = Boolean(req.file);
   const mediaUrl = req.body.mediaUrl;
   const mediaType = hasFile ? detectMediaType(req.file.mimetype) : req.body.mediaType;
@@ -176,6 +190,10 @@ async function createPost(req, res) {
 
   if (!hasFile && !['image', 'video', 'audio'].includes(mediaType)) {
     return res.status(400).json({ error: 'Unsupported media type.' });
+  }
+
+  if (postType === 'uclip' && mediaType !== 'video') {
+    return res.status(400).json({ error: 'UClips must be video only.' });
   }
 
   let resolvedMediaUrl = mediaUrl;
@@ -227,6 +245,7 @@ async function createPost(req, res) {
       description,
       mediaType,
       mediaUrl: resolvedMediaUrl,
+      postType,
       mediaPublicId: hasFile ? uploadResult.public_id : undefined,
       mimeType: hasFile ? req.file.mimetype : undefined,
       size: hasFile ? req.file.size : undefined,
@@ -389,6 +408,12 @@ async function updatePost(req, res) {
   if (req.body.description !== undefined) {
     updates.description = req.body.description;
   }
+  if (req.body.postType !== undefined) {
+    const normalized = normalizePostType(req.body.postType);
+    if (!normalized || normalized !== post.postType) {
+      return res.status(400).json({ error: 'postType cannot be changed.' });
+    }
+  }
   if (req.body.shareToFacebook !== undefined) {
     updates.shareToFacebook = Boolean(req.body.shareToFacebook);
   }
@@ -415,6 +440,9 @@ async function updatePost(req, res) {
     const mediaType = detectMediaType(req.file.mimetype);
     if (!mediaType) {
       return res.status(400).json({ error: 'Unsupported media type.' });
+    }
+    if (post.postType === 'uclip' && mediaType !== 'video') {
+      return res.status(400).json({ error: 'UClips must be video only.' });
     }
     try {
       const uploadResult = await uploadMediaBuffer(req.file.buffer, {
@@ -883,6 +911,7 @@ async function listMyPosts(req, res) {
           mediaUrl: 1,
           ublastId: 1,
           sharedFromPostId: 1,
+          postType: 1,
           createdAt: 1,
           status: 1,
           isShared: 1,
@@ -893,6 +922,207 @@ async function listMyPosts(req, res) {
           viewerIsFollowing: 1,
           viewerHasSaved: 1,
           comments: 1,
+          author: {
+            id: '$author._id',
+            name: '$author.name',
+            email: '$author.email',
+          },
+          profile: {
+            username: '$profile.username',
+            displayName: '$profile.displayName',
+            role: '$profile.role',
+            profileImageUrl: '$profile.profileImageUrl',
+          },
+        },
+      },
+    ]),
+  ]);
+
+  const totalPages = Math.max(1, Math.ceil(totalCount / limit));
+
+  return res.status(200).json({
+    posts,
+    page,
+    totalPages,
+    totalCount,
+  });
+}
+
+async function listUclips(req, res) {
+  const viewerId = new mongoose.Types.ObjectId(req.user.id);
+  const page = parsePaging(req.query.page, 1);
+  const limit = parsePaging(req.query.limit, 10, 50);
+  const skip = (page - 1) * limit;
+
+  const visibilityMatch = {
+    postType: 'uclip',
+    mediaType: 'video',
+    $and: [
+      { $or: [{ status: 'published' }, { status: { $exists: false } }] },
+      { $or: [{ isApproved: true }, { isApproved: { $exists: false } }] },
+    ],
+  };
+
+  const [totalCount, posts] = await Promise.all([
+    Post.countDocuments(visibilityMatch),
+    Post.aggregate([
+      { $match: visibilityMatch },
+      {
+        $lookup: {
+          from: 'users',
+          localField: 'userId',
+          foreignField: '_id',
+          as: 'author',
+        },
+      },
+      { $unwind: '$author' },
+      {
+        $lookup: {
+          from: 'profiles',
+          localField: 'userId',
+          foreignField: 'userId',
+          as: 'profile',
+        },
+      },
+      { $unwind: { path: '$profile', preserveNullAndEmptyArrays: true } },
+      {
+        $lookup: {
+          from: 'likes',
+          let: { postId: '$_id' },
+          pipeline: [
+            { $match: { $expr: { $eq: ['$postId', '$$postId'] } } },
+            { $count: 'count' },
+          ],
+          as: 'likeCounts',
+        },
+      },
+      {
+        $lookup: {
+          from: 'comments',
+          let: { postId: '$_id' },
+          pipeline: [
+            { $match: { $expr: { $eq: ['$postId', '$$postId'] } } },
+            { $count: 'count' },
+          ],
+          as: 'commentCounts',
+        },
+      },
+      {
+        $lookup: {
+          from: 'posts',
+          let: { postId: '$_id' },
+          pipeline: [
+            { $match: { $expr: { $eq: ['$sharedFromPostId', '$$postId'] } } },
+            { $count: 'count' },
+          ],
+          as: 'shareCounts',
+        },
+      },
+      {
+        $lookup: {
+          from: 'likes',
+          let: { postId: '$_id', viewerId },
+          pipeline: [
+            {
+              $match: {
+                $expr: {
+                  $and: [
+                    { $eq: ['$postId', '$$postId'] },
+                    { $eq: ['$userId', '$$viewerId'] },
+                  ],
+                },
+              },
+            },
+            { $limit: 1 },
+          ],
+          as: 'viewerLike',
+        },
+      },
+      {
+        $lookup: {
+          from: 'follows',
+          let: { authorId: '$userId', viewerId },
+          pipeline: [
+            {
+              $match: {
+                $expr: {
+                  $and: [
+                    { $eq: ['$followingId', '$$authorId'] },
+                    { $eq: ['$followerId', '$$viewerId'] },
+                  ],
+                },
+              },
+            },
+            { $limit: 1 },
+          ],
+          as: 'viewerFollow',
+        },
+      },
+      {
+        $lookup: {
+          from: 'savedposts',
+          let: { postId: '$_id', viewerId },
+          pipeline: [
+            {
+              $match: {
+                $expr: {
+                  $and: [
+                    { $eq: ['$postId', '$$postId'] },
+                    { $eq: ['$userId', '$$viewerId'] },
+                  ],
+                },
+              },
+            },
+            { $limit: 1 },
+          ],
+          as: 'viewerSaved',
+        },
+      },
+      {
+        $addFields: {
+          likeCount: { $ifNull: [{ $arrayElemAt: ['$likeCounts.count', 0] }, 0] },
+          commentCount: { $ifNull: [{ $arrayElemAt: ['$commentCounts.count', 0] }, 0] },
+          shareCount: { $ifNull: [{ $arrayElemAt: ['$shareCounts.count', 0] }, 0] },
+          viewerHasLiked: { $gt: [{ $size: '$viewerLike' }, 0] },
+          viewerIsFollowing: {
+            $cond: [
+              { $eq: ['$userId', viewerId] },
+              false,
+              { $gt: [{ $size: '$viewerFollow' }, 0] },
+            ],
+          },
+          viewerHasSaved: { $gt: [{ $size: '$viewerSaved' }, 0] },
+        },
+      },
+      {
+        $addFields: {
+          score: {
+            $add: [
+              '$likeCount',
+              '$commentCount',
+              '$shareCount',
+              { $ifNull: ['$viewCount', 0] },
+            ],
+          },
+        },
+      },
+      { $sort: { score: -1, createdAt: -1 } },
+      { $skip: skip },
+      { $limit: limit },
+      {
+        $project: {
+          description: 1,
+          mediaType: 1,
+          mediaUrl: 1,
+          postType: 1,
+          createdAt: 1,
+          viewCount: 1,
+          likeCount: 1,
+          commentCount: 1,
+          shareCount: 1,
+          viewerHasLiked: 1,
+          viewerIsFollowing: 1,
+          viewerHasSaved: 1,
           author: {
             id: '$author._id',
             name: '$author.name',
@@ -951,4 +1181,5 @@ module.exports = {
   cancelScheduledPost,
   deleteCancelledScheduledPost,
   listMyPosts,
+  listUclips,
 };

@@ -292,7 +292,7 @@ export default function FeedPage() {
     }
   }
 
-  async function handleCreatePost() {
+  async function handleCreatePost(postType = "upost") {
     if (!auth.token) {
       router.push("/login");
       return;
@@ -305,6 +305,10 @@ export default function FeedPage() {
     const mediaType = detectMediaType(mediaFile);
     if (!mediaType) {
       setStatus({ type: "error", message: "Unsupported media type." });
+      return;
+    }
+    if (postType === "uclip" && mediaType !== "video") {
+      setStatus({ type: "error", message: "UClips must be video only." });
       return;
     }
 
@@ -363,6 +367,7 @@ export default function FeedPage() {
         scheduledFor: form.scheduledFor || "",
         mediaUrl: uploadData.secure_url || uploadData.url,
         mediaType,
+        postType,
       };
       setStatus({ type: "loading", message: "Creating post..." });
       const result = await apiRequest({
@@ -394,6 +399,7 @@ export default function FeedPage() {
       formData.append("shareTargets", JSON.stringify(form.shareTargets));
     }
     if (form.scheduledFor) formData.append("scheduledFor", form.scheduledFor);
+    if (postType) formData.append("postType", postType);
     formData.append("media", mediaFile);
     setStatus({ type: "loading", message: "Creating post..." });
     const result = await apiRequest({
@@ -649,6 +655,7 @@ export default function FeedPage() {
         }
         onFileChange={(event) => setMediaFile(event.target.files?.[0] || null)}
         onSubmit={handleCreatePost}
+        onSubmitPostType={handleCreatePost}
       />
       {feedError && (
         <section className="card">

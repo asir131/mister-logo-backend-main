@@ -76,6 +76,7 @@ async function getTrending(req, res) {
       {
         $or: [{ isApproved: true }, { isApproved: { $exists: false } }],
       },
+      { postType: { $ne: "uclip" } },
     ],
   };
 
@@ -138,6 +139,7 @@ async function getTrending(req, res) {
       { $or: [{ status: "published" }, { status: { $exists: false } }] },
       { $or: [{ isApproved: true }, { isApproved: { $exists: false } }] },
     ],
+    postType: { $ne: "uclip" },
     $or: [{ ublastId: null }, { ublastId: { $exists: false } }],
     ...(excludedIds.size
       ? {

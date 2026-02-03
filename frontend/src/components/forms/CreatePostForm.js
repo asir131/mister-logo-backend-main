@@ -13,6 +13,7 @@ export default function CreatePostForm({
   onToggleTarget,
   onFileChange,
   onSubmit,
+  onSubmitPostType,
 }) {
   return (
     <section className="card">
@@ -47,8 +48,19 @@ export default function CreatePostForm({
       </label>
       <input type="file" accept="image/*,video/*,audio/*" onChange={onFileChange} />
       <div className="actions">
-        <button className="btn" type="button" onClick={onSubmit}>
+        <button
+          className="btn"
+          type="button"
+          onClick={() => (onSubmitPostType ? onSubmitPostType("upost") : onSubmit())}
+        >
           Create post
+        </button>
+        <button
+          className="btn secondary"
+          type="button"
+          onClick={() => (onSubmitPostType ? onSubmitPostType("uclip") : onSubmit())}
+        >
+          Create UClip
         </button>
       </div>
     </section>

@@ -28,6 +28,12 @@ const postSchema = new mongoose.Schema(
       default: 'published',
       index: true,
     },
+    postType: {
+      type: String,
+      enum: ['upost', 'uclip', 'ushare', 'ublast'],
+      default: 'upost',
+      index: true,
+    },
     scheduledFor: { type: Date, index: true },
     publishedAt: { type: Date, index: true },
     isApproved: { type: Boolean, default: true, index: true },
