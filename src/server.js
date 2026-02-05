@@ -7,6 +7,7 @@ const cors = require("cors");
 const jwt = require("jsonwebtoken");
 const { Server } = require("socket.io");
 const { registerChatSocket } = require("./sockets/chatSocket");
+const { addOnlineUser, removeOnlineUser } = require("./store/onlineUsers");
 
 dotenv.config();
 require("./config/passport");
@@ -32,6 +33,7 @@ const ucutRoutes = require("./routes/ucutRoutes");
 const viewRoutes = require("./routes/viewRoutes");
 const uploadRoutes = require("./routes/uploadRoutes");
 const translateRoutes = require("./routes/translateRoutes");
+const ublastOfferRoutes = require("./routes/ublastOfferRoutes");
 const { startUblastJobs } = require("./jobs/ublastScheduler");
 const { startPostScheduler } = require("./jobs/postScheduler");
 
@@ -77,6 +79,7 @@ app.use("/api/ucuts", ucutRoutes);
 app.use("/api/views", viewRoutes);
 app.use("/api/uploads", uploadRoutes);
 app.use("/api/translate", translateRoutes);
+app.use("/api/ublast-offers", ublastOfferRoutes);
 app.use("/api/admin/auth", adminAuthRoutes);
 app.use("/api/admin", adminUblastRoutes);
 app.use("/webhooks", webhooksRoutes);
@@ -129,8 +132,15 @@ io.use((socket, next) => {
 io.on("connection", (socket) => {
   if (socket.userId) {
     socket.join(`user:${socket.userId}`);
+    addOnlineUser(socket.userId);
   }
   registerChatSocket(io, socket);
+
+  socket.on("disconnect", () => {
+    if (socket.userId) {
+      removeOnlineUser(socket.userId);
+    }
+  });
 });
 
 app.set("io", io);

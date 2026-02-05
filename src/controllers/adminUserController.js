@@ -1,6 +1,8 @@
 const mongoose = require('mongoose');
 
 const User = require('../models/User');
+const { getOnlineUserIds } = require('../store/onlineUsers');
+const UblastOffer = require('../models/UblastOffer');
 
 function parsePaging(value, fallback, max) {
   const parsed = Number.parseInt(value, 10);
@@ -22,14 +24,51 @@ function buildStatus(user) {
   return 'Active';
 }
 
+function getUblastStreakMonths(user) {
+  if (!user) return 0;
+  if (user.ublastManualBlocked) return 0;
+  if (user.ublastBlockedUntil && new Date(user.ublastBlockedUntil).getTime() > Date.now()) {
+    return 0;
+  }
+  const createdAt = user.createdAt ? new Date(user.createdAt) : null;
+  if (!createdAt || Number.isNaN(createdAt.getTime())) return 0;
+  const now = new Date();
+  const months =
+    (now.getFullYear() - createdAt.getFullYear()) * 12 + (now.getMonth() - createdAt.getMonth());
+  return Math.max(0, months);
+}
+
 async function listUsers(req, res) {
+  const filter = req.query.filter ? String(req.query.filter).toLowerCase() : 'all';
   const page = parsePaging(req.query.page, 1);
   const limit = parsePaging(req.query.limit, 20, 100);
   const skip = (page - 1) * limit;
+  const onlineUserIds = getOnlineUserIds();
+
+  let match = {};
+  if (filter === 'active') {
+    match = {
+      $and: [
+        { ublastManualBlocked: { $ne: true } },
+        {
+          $or: [
+            { ublastBlockedUntil: { $exists: false } },
+            { ublastBlockedUntil: null },
+            { ublastBlockedUntil: { $lte: new Date() } },
+          ],
+        },
+      ],
+    };
+  } else if (filter === 'restricted') {
+    match = {
+      $or: [{ ublastManualBlocked: true }, { ublastBlockedUntil: { $gt: new Date() } }],
+    };
+  }
 
   const [totalCount, users] = await Promise.all([
-    User.countDocuments(),
+    User.countDocuments(match),
     User.aggregate([
+      { $match: match },
       { $sort: { createdAt: -1 } },
       { $skip: skip },
       { $limit: limit },
@@ -64,6 +103,23 @@ async function listUsers(req, res) {
     ]),
   ]);
 
+  const userIds = users.map((user) => user._id);
+  const latestOffers = await UblastOffer.aggregate([
+    { $match: { userId: { $in: userIds } } },
+    { $sort: { createdAt: -1 } },
+    {
+      $group: {
+        _id: '$userId',
+        status: { $first: '$status' },
+        priceCents: { $first: '$priceCents' },
+        createdAt: { $first: '$createdAt' },
+      },
+    },
+  ]);
+  const latestOfferByUser = new Map(
+    latestOffers.map((entry) => [entry._id.toString(), entry]),
+  );
+
   const totalPages = Math.max(1, Math.ceil(totalCount / limit));
 
   const mapped = users.map((user) => ({
@@ -79,6 +135,11 @@ async function listUsers(req, res) {
     ublastBlocked: Boolean(user.ublastManualBlocked || isBlockedUntil(user.ublastBlockedUntil)),
     ublastBlockedUntil: user.ublastBlockedUntil || null,
     lastActivity: user.updatedAt,
+    isOnline: onlineUserIds.has(String(user._id)),
+    ublastStreakMonths: getUblastStreakMonths(user),
+    offerStatus: latestOfferByUser.get(user._id.toString())?.status || null,
+    offerPriceCents: latestOfferByUser.get(user._id.toString())?.priceCents || null,
+    offerCreatedAt: latestOfferByUser.get(user._id.toString())?.createdAt || null,
     joinedDate: user.createdAt,
   }));
 

@@ -6,6 +6,7 @@ const UBlastSubmission = require('../models/UBlastSubmission');
 const User = require('../models/User');
 const Post = require('../models/Post');
 const Profile = require('../models/Profile');
+const UblastOffer = require('../models/UblastOffer');
 const { uploadMediaBuffer } = require('../services/cloudinary');
 
 function handleValidation(req, res) {
@@ -63,10 +64,12 @@ async function getActiveUblasts(req, res) {
     UBlast.countDocuments({
       status: 'released',
       expiresAt: { $gt: now },
+      $or: [{ targetUserId: null }, { targetUserId: { $exists: false } }, { targetUserId: userId }],
     }),
     UBlast.find({
       status: 'released',
       expiresAt: { $gt: now },
+      $or: [{ targetUserId: null }, { targetUserId: { $exists: false } }, { targetUserId: userId }],
     })
       .sort({ releasedAt: -1 })
       .skip(skip)
@@ -101,6 +104,8 @@ async function getActiveUblasts(req, res) {
       dueAt,
       viewerHasShared: Boolean(sharedPost),
       sharedAt: sharedPost?.createdAt || null,
+      rewardLabel: ublast.rewardLabel || null,
+      rewardType: ublast.rewardType || null,
     };
   });
 
@@ -222,6 +227,15 @@ async function shareUblastInternal({ userId, ublastId, shareType }) {
   }
   if (ublast.status !== 'released' || !ublast.expiresAt || ublast.expiresAt <= now) {
     return { status: 400, error: 'UBlast is not active.' };
+  }
+  if (ublast.rewardType === 'offer') {
+    const offer = await UblastOffer.findOne({ ublastId, userId }).lean();
+    if (!offer) {
+      return { status: 403, error: 'Payment required to share this UBlast.' };
+    }
+    if (offer.status !== 'paid') {
+      return { status: 403, error: 'Payment required to share this UBlast.' };
+    }
   }
 
   const releaseTime = ublast.releasedAt ? new Date(ublast.releasedAt) : null;

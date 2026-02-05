@@ -1,4 +1,5 @@
 import "./globals.css";
+import PresenceSocket from "../components/PresenceSocket";
 
 export const metadata = {
   title: "Mister Logo API Console",
@@ -8,7 +9,10 @@ export const metadata = {
 export default function RootLayout({ children }) {
   return (
     <html lang="en">
-      <body>{children}</body>
+      <body>
+        <PresenceSocket />
+        {children}
+      </body>
     </html>
   );
 }

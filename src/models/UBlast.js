@@ -17,11 +17,15 @@ const ublastSchema = new mongoose.Schema(
     expiresAt: { type: Date, index: true },
     topExpiresAt: { type: Date, index: true },
     createdBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+    targetUserId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', index: true },
+    rewardType: { type: String, enum: ['reward', 'offer'] },
+    rewardLabel: { type: String },
   },
   { timestamps: true },
 );
 
 ublastSchema.index({ status: 1, expiresAt: 1 });
 ublastSchema.index({ status: 1, topExpiresAt: 1 });
+ublastSchema.index({ targetUserId: 1, status: 1 });
 
 module.exports = mongoose.model('UBlast', ublastSchema);

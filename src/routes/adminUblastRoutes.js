@@ -23,6 +23,14 @@ const {
 } = require('../controllers/adminUserController');
 const { listUserPosts } = require('../controllers/adminPostController');
 const { getTrending } = require('../controllers/trendingController');
+const { getAdminStats } = require('../controllers/adminStatsController');
+const {
+  createRewardUblast,
+  createOffer,
+  getOfferSummary,
+  listOffers,
+  listRewardedUblasts,
+} = require('../controllers/adminUblastOfferController');
 
 const upload = multer({
   storage: multer.memoryStorage(),
@@ -83,5 +91,11 @@ router.get('/users', listUsers);
 router.patch('/users/:userId/restrict', restrictUser);
 router.patch('/users/:userId/unrestrict', unrestrictUser);
 router.get('/posts', listUserPosts);
+router.get('/stats', getAdminStats);
+router.get('/ublast-offers/summary', getOfferSummary);
+router.get('/ublast-offers', listOffers);
+router.get('/rewarded-ublasts', listRewardedUblasts);
+router.post('/ublasts/:ublastId/reward', createRewardUblast);
+router.post('/ublasts/:ublastId/offer', createOffer);
 
 module.exports = router;
