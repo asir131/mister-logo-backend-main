@@ -468,6 +468,10 @@ async function clearConversation(req, res) {
 async function blockUser(req, res) {
   const userId = req.user.id;
   const { userId: otherUserId } = req.params;
+  const action = typeof req.body?.action === 'string' ? req.body.action.toLowerCase() : '';
+  const blockedFlag = req.body?.blocked;
+  const shouldUnblock =
+    action === 'unblock' || action === 'remove' || blockedFlag === false;
 
   if (!mongoose.isValidObjectId(otherUserId)) {
     return res.status(400).json({ error: 'Invalid user id.' });
@@ -480,6 +484,11 @@ async function blockUser(req, res) {
   const otherUser = await User.findById(otherUserId).select('_id').lean();
   if (!otherUser) {
     return res.status(404).json({ error: 'User not found.' });
+  }
+
+  if (shouldUnblock) {
+    await Block.deleteOne({ blockerId: userId, blockedId: otherUserId });
+    return res.status(200).json({ blocked: false });
   }
 
   await Block.updateOne(
