@@ -5,6 +5,7 @@ const UblastOffer = require('../models/UblastOffer');
 const UBlast = require('../models/UBlast');
 
 const STRIPE_SECRET_KEY = process.env.STRIPE_SECRET_KEY || '';
+const APP_WEB_BASE_URL = process.env.APP_WEB_BASE_URL || 'http://localhost:3000';
 const stripe = STRIPE_SECRET_KEY ? new Stripe(STRIPE_SECRET_KEY) : null;
 
 async function listMyOffers(req, res) {
@@ -50,6 +51,56 @@ async function createPaymentIntent(req, res) {
   return res.status(200).json({
     clientSecret: intent.client_secret,
   });
+}
+
+async function createCheckoutSession(req, res) {
+  const { offerId } = req.params;
+  if (!mongoose.isValidObjectId(offerId)) {
+    return res.status(400).json({ error: 'Invalid offer id.' });
+  }
+  if (!stripe) {
+    return res.status(500).json({ error: 'Stripe is not configured.' });
+  }
+
+  const offer = await UblastOffer.findOne({ _id: offerId, userId: req.user.id })
+    .populate('ublastId', 'title')
+    .lean();
+  if (!offer) {
+    return res.status(404).json({ error: 'Offer not found.' });
+  }
+  if (offer.status !== 'pending') {
+    return res.status(400).json({ error: 'Offer is not payable.' });
+  }
+  if (offer.expiresAt && offer.expiresAt.getTime() < Date.now()) {
+    await UblastOffer.updateOne(
+      { _id: offerId },
+      { $set: { status: 'expired' } },
+    );
+    return res.status(400).json({ error: 'Offer expired.' });
+  }
+
+  const session = await stripe.checkout.sessions.create({
+    mode: 'payment',
+    payment_intent_data: {
+      metadata: { offerId: offer._id.toString(), userId: offer.userId.toString() },
+    },
+    line_items: [
+      {
+        quantity: 1,
+        price_data: {
+          currency: offer.currency || 'usd',
+          unit_amount: offer.priceCents,
+          product_data: {
+            name: offer.ublastId?.title || 'UBlast Offer',
+          },
+        },
+      },
+    ],
+    success_url: `${APP_WEB_BASE_URL}/trending?payment=success&offerId=${offer._id}`,
+    cancel_url: `${APP_WEB_BASE_URL}/trending?payment=cancel&offerId=${offer._id}`,
+  });
+
+  return res.status(200).json({ url: session.url });
 }
 
 async function cancelOffer(req, res) {
@@ -113,6 +164,7 @@ async function handleStripeWebhook(req, res) {
 module.exports = {
   listMyOffers,
   createPaymentIntent,
+  createCheckoutSession,
   cancelOffer,
   handleStripeWebhook,
 };

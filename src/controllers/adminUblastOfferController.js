@@ -45,13 +45,17 @@ async function createRewardUblast(req, res) {
 
 async function createOffer(req, res) {
   const { ublastId } = req.params;
-  const { userId, priceCents, currency } = req.body;
+  const { userId, priceCents, priceDollars, currency } = req.body;
   if (!requireObjectId(ublastId) || !requireObjectId(userId)) {
     return res.status(400).json({ error: 'Invalid ublastId or userId.' });
   }
-  const amount = Number(priceCents);
-  if (!Number.isFinite(amount) || amount <= 0) {
-    return res.status(400).json({ error: 'priceCents must be a positive number.' });
+  const amountSource =
+    priceDollars !== undefined && priceDollars !== null
+      ? Number(priceDollars) * 100
+      : Number(priceCents);
+  const amount = Math.round(amountSource);
+  if (!Number.isFinite(amount) || amount < 50) {
+    return res.status(400).json({ error: 'priceDollars must be at least 0.50.' });
   }
 
   const source = await UBlast.findById(ublastId).lean();

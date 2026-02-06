@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import PageShell from "../../components/PageShell";
@@ -48,6 +48,7 @@ export default function FeedPage() {
   const [ucutComments, setUcutComments] = useState({});
   const [commentText, setCommentText] = useState("");
   const [commentLoading, setCommentLoading] = useState(false);
+  const viewedPostIdsRef = useRef(new Set());
   const auth = getAuth();
   const labels = [
     "Stories",
@@ -103,6 +104,16 @@ export default function FeedPage() {
     setFeedTotalPages(result.data.totalPages);
     setPosts((prev) => (replace ? result.data.posts : [...prev, ...result.data.posts]));
     setFeedLoading(false);
+  }
+
+  async function recordView(postId) {
+    if (!auth.token || !postId) return;
+    await apiRequest({
+      path: "/api/views/post",
+      method: "POST",
+      body: { postId },
+      token: auth.token,
+    });
   }
 
   async function loadUcuts() {
@@ -262,6 +273,17 @@ export default function FeedPage() {
       loadUcutComments(activeUcut._id);
     }
   }, [activeUcut?._id, canComment]);
+
+  useEffect(() => {
+    if (!posts.length) return;
+    const seen = viewedPostIdsRef.current;
+    const pending = posts.filter((post) => post?._id && !seen.has(post._id));
+    if (!pending.length) return;
+    pending.forEach((post) => {
+      seen.add(post._id);
+      recordView(post._id);
+    });
+  }, [posts]);
 
   function goNextSegment() {
     if (!activeStorySegments.length) return;

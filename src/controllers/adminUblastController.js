@@ -98,11 +98,21 @@ async function listUblasts(req, res) {
   if (req.query.status) {
     match.status = req.query.status;
   }
-  const ublasts = await UBlast.find(match)
-    .sort({ createdAt: -1 })
-    .limit(100)
-    .lean();
-  return res.status(200).json({ ublasts });
+  const page = parsePaging(req.query.page, 1);
+  const limit = parsePaging(req.query.limit, 20, 100);
+  const skip = (page - 1) * limit;
+
+  const [totalCount, ublasts] = await Promise.all([
+    UBlast.countDocuments(match),
+    UBlast.find(match)
+      .sort({ createdAt: -1 })
+      .skip(skip)
+      .limit(limit)
+      .lean(),
+  ]);
+
+  const totalPages = Math.max(1, Math.ceil(totalCount / limit));
+  return res.status(200).json({ ublasts, page, totalPages, totalCount });
 }
 
 function parsePaging(value, fallback, max) {
@@ -134,6 +144,15 @@ async function listOfficialUblasts(req, res) {
     : [];
   const creatorById = new Map(creators.map((user) => [user._id.toString(), user]));
 
+  const submissionLinks = await UBlastSubmission.find({
+    approvedUblastId: { $in: ublasts.map((ublast) => ublast._id) },
+  })
+    .select('approvedUblastId')
+    .lean();
+  const submissionMap = new Set(
+    submissionLinks.map((entry) => entry.approvedUblastId.toString()),
+  );
+
   const now = Date.now();
   const mapped = ublasts.map((ublast) => {
     const creator = ublast.createdBy
@@ -141,6 +160,12 @@ async function listOfficialUblasts(req, res) {
       : null;
     const isActive =
       ublast.status === 'released' && ublast.expiresAt && ublast.expiresAt.getTime() > now;
+    let badgeType = 'Admin UBlast';
+    if (ublast.rewardType === 'reward') {
+      badgeType = 'Rewarded UBlast';
+    } else if (submissionMap.has(ublast._id.toString())) {
+      badgeType = 'User Submission';
+    }
     return {
       id: ublast._id,
       title: ublast.title,
@@ -149,6 +174,8 @@ async function listOfficialUblasts(req, res) {
       status: isActive ? 'Active' : 'Timeout',
       createdAt: ublast.createdAt,
       createdBy: creator?.name || 'Admin',
+      badgeType,
+      rewardType: ublast.rewardType || null,
     };
   });
 
@@ -225,14 +252,23 @@ async function listSubmissions(req, res) {
     match.ublastId = req.query.ublastId;
   }
 
-  const submissions = await UBlastSubmission.find(match)
-    .sort({ createdAt: -1 })
-    .limit(200)
-    .populate('userId', 'name email')
-    .populate('ublastId', 'title')
-    .lean();
+  const page = parsePaging(req.query.page, 1);
+  const limit = parsePaging(req.query.limit, 20, 100);
+  const skip = (page - 1) * limit;
 
-  return res.status(200).json({ submissions });
+  const [totalCount, submissions] = await Promise.all([
+    UBlastSubmission.countDocuments(match),
+    UBlastSubmission.find(match)
+      .sort({ createdAt: -1 })
+      .skip(skip)
+      .limit(limit)
+      .populate('userId', 'name email')
+      .populate('ublastId', 'title')
+      .lean(),
+  ]);
+
+  const totalPages = Math.max(1, Math.ceil(totalCount / limit));
+  return res.status(200).json({ submissions, page, totalPages, totalCount });
 }
 
 async function reviewSubmission(req, res) {
