@@ -29,6 +29,18 @@ async function sendOtpEmail(to, otp) {
   return transporter.sendMail(mailOptions);
 }
 
+async function sendEmail({ to, subject, text, html }) {
+  const mailOptions = {
+    from: EMAIL_FROM || EMAIL_USER,
+    to,
+    subject,
+    text,
+    html,
+  };
+  return transporter.sendMail(mailOptions);
+}
+
 module.exports = {
   sendOtpEmail,
+  sendEmail,
 };

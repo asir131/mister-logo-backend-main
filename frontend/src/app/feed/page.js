@@ -6,9 +6,9 @@ import { useRouter } from "next/navigation";
 import PageShell from "../../components/PageShell";
 import CreatePostForm from "../../components/forms/CreatePostForm";
 import PostCard from "../../components/feed/PostCard";
+import ShareModal from "../../components/share/ShareModal";
 import { apiRequest } from "../../lib/apiClient";
 import { clearAuth, getAuth, getProfile } from "../../lib/authStore";
-import { openFacebookShare, openInstagramShare } from "../../lib/shareDialogs";
 import { useTranslations } from "../../lib/useTranslations";
 
 const emptyPost = {
@@ -38,6 +38,7 @@ export default function FeedPage() {
   const [feedLoading, setFeedLoading] = useState(false);
   const [feedError, setFeedError] = useState(null);
   const [commentsByPost, setCommentsByPost] = useState({});
+  const [sharePost, setSharePost] = useState(null);
   const [ucuts, setUcuts] = useState([]);
   const [ucutLoading, setUcutLoading] = useState(false);
   const [ucutError, setUcutError] = useState(null);
@@ -527,34 +528,6 @@ export default function FeedPage() {
     );
   }
 
-  async function handleSharePost(post) {
-    if (!auth.token) return;
-    setStatus({ type: "loading", message: "Sharing to feed..." });
-    const result = await apiRequest({
-      path: `/api/posts/${post._id}/share`,
-      method: "POST",
-      body: {},
-      token: auth.token,
-    });
-    if (!result.ok) {
-      setStatus({
-        type: "error",
-        message: result.data?.error || "Share failed.",
-      });
-      return;
-    }
-    setStatus({ type: "success", message: "Shared to your feed." });
-    loadFeed(1, true);
-  }
-
-  function handleShareFacebook(post) {
-    openFacebookShare(post);
-  }
-
-  function handleShareInstagram(post) {
-    openInstagramShare(post);
-  }
-
   async function handleLoadComments(post, page = 1) {
     if (!auth.token) return;
     setCommentsByPost((prev) => ({
@@ -715,9 +688,7 @@ export default function FeedPage() {
           onToggleFollow={handleToggleFollow}
           onToggleLike={handleToggleLike}
           onToggleSave={handleToggleSave}
-          onSharePost={handleSharePost}
-          onShareFacebook={handleShareFacebook}
-          onShareInstagram={handleShareInstagram}
+          onOpenShare={setSharePost}
           commentsState={commentsByPost[post._id]}
           onLoadComments={handleLoadComments}
           onAddComment={handleAddComment}
@@ -852,6 +823,20 @@ export default function FeedPage() {
           </div>
         </div>
       )}
+      <ShareModal
+        open={Boolean(sharePost)}
+        post={sharePost}
+        token={auth.token}
+        onClose={() => setSharePost(null)}
+        onShared={({ action }) => {
+          if (action === "feed") {
+            loadFeed(1, true);
+          }
+          if (action === "ucuts") {
+            loadUcuts();
+          }
+        }}
+      />
     </PageShell>
   );
 }

@@ -26,6 +26,7 @@ const {
 const { listUserPosts } = require('../controllers/adminPostController');
 const { getTrending } = require('../controllers/trendingController');
 const { getAdminStats } = require('../controllers/adminStatsController');
+const { sendBulkEmail, sendBulkSms } = require('../controllers/adminCommunicationsController');
 const {
   createRewardUblast,
   createOffer,
@@ -96,6 +97,26 @@ router.patch('/users/:userId/restrict', restrictUser);
 router.patch('/users/:userId/unrestrict', unrestrictUser);
 router.get('/posts', listUserPosts);
 router.get('/stats', getAdminStats);
+router.post(
+  '/communications/email',
+  [
+    body('subject').trim().notEmpty().withMessage('Subject is required'),
+    body('content').trim().notEmpty().withMessage('Content is required'),
+    body('filter').optional({ nullable: true }).isIn(['all', 'active', 'restricted', 'selected']),
+    body('userIds').optional({ nullable: true }).isArray(),
+  ],
+  sendBulkEmail,
+);
+
+router.post(
+  '/communications/sms',
+  [
+    body('content').trim().notEmpty().withMessage('Content is required'),
+    body('filter').optional({ nullable: true }).isIn(['all', 'active', 'restricted', 'selected']),
+    body('userIds').optional({ nullable: true }).isArray(),
+  ],
+  sendBulkSms,
+);
 router.get('/ublast-offers/summary', getOfferSummary);
 router.get('/ublast-offers', listOffers);
 router.get('/rewarded-ublasts', listRewardedUblasts);

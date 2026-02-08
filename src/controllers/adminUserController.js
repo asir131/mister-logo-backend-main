@@ -65,8 +65,16 @@ async function listUsers(req, res) {
     };
   }
 
-  const [totalCount, users] = await Promise.all([
+  const [totalCount, emailCount, phoneCount, users] = await Promise.all([
     User.countDocuments(match),
+    User.countDocuments({
+      ...match,
+      email: { $exists: true, $ne: '' },
+    }),
+    User.countDocuments({
+      ...match,
+      phoneNumber: { $exists: true, $ne: '' },
+    }),
     User.aggregate([
       { $match: match },
       { $sort: { createdAt: -1 } },
@@ -148,6 +156,8 @@ async function listUsers(req, res) {
     page,
     totalPages,
     totalCount,
+    totalEmails: emailCount,
+    totalPhones: phoneCount,
   });
 }
 

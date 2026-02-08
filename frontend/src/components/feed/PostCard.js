@@ -23,9 +23,7 @@ export default function PostCard({
   onToggleFollow,
   onToggleLike,
   onToggleSave,
-  onSharePost,
-  onShareFacebook,
-  onShareInstagram,
+  onOpenShare,
   onDelete,
   onEdit,
   commentsState,
@@ -37,9 +35,7 @@ export default function PostCard({
   const labelTexts = [
     "Like",
     "Unlike",
-    "Share to Feed",
-    "Share to Facebook",
-    "Share to Instagram",
+    "Share",
     "Delete",
     "Edit",
     "Save",
@@ -118,27 +114,9 @@ export default function PostCard({
         <button className="btn ghost" type="button" onClick={() => onToggleLike(post)}>
           {post.viewerHasLiked ? t("Unlike") : t("Like")} - {post.likeCount}
         </button>
-        {onSharePost && (
-          <button className="btn ghost" type="button" onClick={() => onSharePost(post)}>
-            {t("Share to Feed")}
-          </button>
-        )}
-        {onShareFacebook && (
-          <button
-            className="btn ghost"
-            type="button"
-            onClick={() => onShareFacebook(post)}
-          >
-            {t("Share to Facebook")}
-          </button>
-        )}
-        {onShareInstagram && (
-          <button
-            className="btn ghost"
-            type="button"
-            onClick={() => onShareInstagram(post)}
-          >
-            {t("Share to Instagram")}
+        {onOpenShare && (
+          <button className="btn ghost" type="button" onClick={() => onOpenShare(post)}>
+            {t("Share")}
           </button>
         )}
         {onDelete && (
