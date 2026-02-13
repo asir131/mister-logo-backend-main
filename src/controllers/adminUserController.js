@@ -3,6 +3,24 @@ const mongoose = require('mongoose');
 const User = require('../models/User');
 const { getOnlineUserIds } = require('../store/onlineUsers');
 const UblastOffer = require('../models/UblastOffer');
+const Profile = require('../models/Profile');
+const Post = require('../models/Post');
+const Comment = require('../models/Comment');
+const Like = require('../models/Like');
+const Follow = require('../models/Follow');
+const SavedPost = require('../models/SavedPost');
+const RefreshToken = require('../models/RefreshToken');
+const OtpToken = require('../models/OtpToken');
+const Conversation = require('../models/Conversation');
+const Message = require('../models/Message');
+const Ucut = require('../models/Ucut');
+const UcutLike = require('../models/UcutLike');
+const UcutComment = require('../models/UcutComment');
+const UBlastSubmission = require('../models/UBlastSubmission');
+const Block = require('../models/Block');
+const SupportThread = require('../models/SupportThread');
+const SupportMessage = require('../models/SupportMessage');
+const ModerationAction = require('../models/ModerationAction');
 
 function parsePaging(value, fallback, max) {
   const parsed = Number.parseInt(value, 10);
@@ -36,6 +54,20 @@ function getUblastStreakMonths(user) {
   const months =
     (now.getFullYear() - createdAt.getFullYear()) * 12 + (now.getMonth() - createdAt.getMonth());
   return Math.max(0, months);
+}
+
+function getAdminIdentifier(req) {
+  if (req?.admin?.email) return req.admin.email;
+  if (req?.admin?.username) return req.admin.username;
+  return 'system';
+}
+
+async function logModerationAction(action) {
+  try {
+    await ModerationAction.create(action);
+  } catch (err) {
+    // Do not block core moderation flows if logging fails
+  }
 }
 
 async function listUsers(req, res) {
@@ -174,6 +206,13 @@ async function restrictUser(req, res) {
   if (!updated) {
     return res.status(404).json({ error: 'User not found.' });
   }
+  await logModerationAction({
+    type: 'restrict',
+    targetType: 'user',
+    targetId: updated._id,
+    targetEmail: updated.email || '',
+    performedBy: getAdminIdentifier(req),
+  });
   return res.status(200).json({
     userId,
     status: buildStatus(updated),
@@ -195,6 +234,13 @@ async function unrestrictUser(req, res) {
   if (!updated) {
     return res.status(404).json({ error: 'User not found.' });
   }
+  await logModerationAction({
+    type: 'unrestrict',
+    targetType: 'user',
+    targetId: updated._id,
+    targetEmail: updated.email || '',
+    performedBy: getAdminIdentifier(req),
+  });
   return res.status(200).json({
     userId,
     status: buildStatus(updated),
@@ -219,9 +265,64 @@ async function clearLinkedAccounts(req, res) {
   return res.status(200).json({ cleared: true });
 }
 
+async function deleteUsersBulk(req, res) {
+  const userIds = Array.isArray(req.body?.userIds) ? req.body.userIds : [];
+  if (!userIds.length) {
+    return res.status(400).json({ error: 'User ids are required.' });
+  }
+  const validIds = userIds.filter((id) => mongoose.isValidObjectId(id));
+  if (!validIds.length) {
+    return res.status(400).json({ error: 'No valid user ids provided.' });
+  }
+
+  const usersToDelete = await User.find(
+    { _id: { $in: validIds } },
+    { email: 1 },
+  ).lean();
+
+  const idMatch = { $in: validIds };
+  await Promise.all([
+    SupportMessage.deleteMany({ userId: idMatch }),
+    SupportThread.deleteMany({ userId: idMatch }),
+    UcutComment.deleteMany({ userId: idMatch }),
+    UcutLike.deleteMany({ userId: idMatch }),
+    Ucut.deleteMany({ userId: idMatch }),
+    Message.deleteMany({ $or: [{ senderId: idMatch }, { recipientId: idMatch }] }),
+    Conversation.deleteMany({ participants: idMatch }),
+    SavedPost.deleteMany({ userId: idMatch }),
+    Like.deleteMany({ userId: idMatch }),
+    Comment.deleteMany({ userId: idMatch }),
+    Follow.deleteMany({ $or: [{ followerId: idMatch }, { followingId: idMatch }] }),
+    UBlastSubmission.deleteMany({ userId: idMatch }),
+    UblastOffer.deleteMany({ userId: idMatch }),
+    Block.deleteMany({ $or: [{ userId: idMatch }, { blockedUserId: idMatch }] }),
+    Post.deleteMany({ userId: idMatch }),
+    Profile.deleteMany({ userId: idMatch }),
+    RefreshToken.deleteMany({ userId: idMatch }),
+    OtpToken.deleteMany({ userId: idMatch }),
+    User.deleteMany({ _id: idMatch }),
+  ]);
+
+  if (usersToDelete.length) {
+    const performedBy = getAdminIdentifier(req);
+    await ModerationAction.insertMany(
+      usersToDelete.map((user) => ({
+        type: 'delete',
+        targetType: 'user',
+        targetId: user._id,
+        targetEmail: user.email || '',
+        performedBy,
+      })),
+    );
+  }
+
+  return res.status(200).json({ deleted: validIds.length });
+}
+
 module.exports = {
   listUsers,
   restrictUser,
   unrestrictUser,
   clearLinkedAccounts,
+  deleteUsersBulk,
 };

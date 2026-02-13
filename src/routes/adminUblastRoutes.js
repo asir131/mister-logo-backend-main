@@ -23,6 +23,7 @@ const {
   restrictUser,
   unrestrictUser,
   clearLinkedAccounts,
+  deleteUsersBulk,
 } = require('../controllers/adminUserController');
 const {
   listThreads,
@@ -38,9 +39,10 @@ const {
   deleteAdmin,
   resetAdminPassword,
 } = require('../controllers/adminSettingsController');
-const { listUserPosts } = require('../controllers/adminPostController');
+const { listUserPosts, deletePost } = require('../controllers/adminPostController');
 const { getTrending } = require('../controllers/trendingController');
 const { getAdminStats } = require('../controllers/adminStatsController');
+const { listModerationActions } = require('../controllers/adminModerationController');
 const { sendBulkEmail, sendBulkSms } = require('../controllers/adminCommunicationsController');
 const {
   createRewardUblast,
@@ -111,8 +113,11 @@ router.get('/users', listUsers);
 router.patch('/users/:userId/restrict', restrictUser);
 router.patch('/users/:userId/unrestrict', unrestrictUser);
 router.delete('/users/:userId/linked-accounts', clearLinkedAccounts);
+router.post('/users/delete', deleteUsersBulk);
 router.get('/posts', listUserPosts);
+router.delete('/posts/:postId', deletePost);
 router.get('/stats', getAdminStats);
+router.get('/moderation/actions', listModerationActions);
 router.post(
   '/communications/email',
   [

@@ -1,6 +1,8 @@
 const jwt = require('jsonwebtoken');
 const { validationResult } = require('express-validator');
 const bcrypt = require('bcryptjs');
+const fs = require('fs/promises');
+const path = require('path');
 const AdminUser = require('../models/AdminUser');
 
 const ADMIN_EMAIL = process.env.ADMIN_EMAIL;
@@ -32,6 +34,7 @@ async function login(req, res) {
       role: 'super',
       passwordHash,
     }).then((doc) => doc.toObject());
+    await clearAdminPasswordEnv();
   }
 
   if (admin.email === ADMIN_EMAIL && admin.role !== 'super') {
@@ -65,3 +68,17 @@ async function login(req, res) {
 module.exports = {
   login,
 };
+async function clearAdminPasswordEnv() {
+  try {
+    const envPath = path.join(process.cwd(), '.env');
+    const existing = await fs.readFile(envPath, 'utf8');
+    const lines = existing.split(/\r?\n/);
+    const updated = lines
+      .map((line) => (line.startsWith('ADMIN_PASSWORD=') ? 'ADMIN_PASSWORD=' : line))
+      .join('\n');
+    await fs.writeFile(envPath, updated, 'utf8');
+    process.env.ADMIN_PASSWORD = '';
+  } catch (err) {
+    // ignore env write errors; db remains source of truth
+  }
+}

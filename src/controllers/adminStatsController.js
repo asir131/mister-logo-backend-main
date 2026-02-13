@@ -81,10 +81,36 @@ async function getAdminStats(req, res) {
         $match: {
           description: { $type: 'string', $ne: '' },
           status: 'published',
+          createdAt: { $gte: new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000) },
+        },
+      },
+      {
+        $lookup: {
+          from: 'likes',
+          localField: '_id',
+          foreignField: 'postId',
+          as: 'likes',
+        },
+      },
+      {
+        $lookup: {
+          from: 'comments',
+          localField: '_id',
+          foreignField: 'postId',
+          as: 'comments',
         },
       },
       {
         $project: {
+          description: 1,
+          viewCount: { $ifNull: ['$viewCount', 0] },
+          likeCount: { $size: '$likes' },
+          commentCount: { $size: '$comments' },
+        },
+      },
+      {
+        $project: {
+          score: { $add: ['$viewCount', '$likeCount', '$commentCount'] },
           matches: {
             $regexFindAll: {
               input: '$description',
@@ -101,11 +127,18 @@ async function getAdminStats(req, res) {
               $concat: ['#', { $arrayElemAt: ['$matches.captures', 0] }],
             },
           },
+          score: 1,
         },
       },
-      { $group: { _id: '$tag', count: { $sum: 1 } } },
-      { $sort: { count: -1 } },
-      { $limit: 6 },
+      {
+        $group: {
+          _id: '$tag',
+          totalScore: { $sum: '$score' },
+          postCount: { $sum: 1 },
+        },
+      },
+      { $sort: { totalScore: -1 } },
+      { $limit: 10 },
     ]),
     UBlast.findOne({ status: 'released' }).sort({ releasedAt: -1, createdAt: -1 }).lean(),
   ]);
@@ -132,7 +165,7 @@ async function getAdminStats(req, res) {
 
   const trendingHashtags = topHashtagsRaw.map((entry) => ({
     tag: entry._id,
-    count: entry.count,
+    count: entry.postCount,
   }));
 
   let ublastSharePercent = 0;

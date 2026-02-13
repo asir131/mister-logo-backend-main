@@ -5,6 +5,7 @@ const User = require('../models/User');
 const Profile = require('../models/Profile');
 const Like = require('../models/Like');
 const Comment = require('../models/Comment');
+const ModerationAction = require('../models/ModerationAction');
 
 function parsePaging(value, fallback, max) {
   const parsed = Number.parseInt(value, 10);
@@ -19,6 +20,20 @@ function buildUblastBlockedStatus(user) {
   if (user.ublastManualBlocked) return true;
   if (!blockedUntil) return false;
   return new Date(blockedUntil).getTime() > Date.now();
+}
+
+function getAdminIdentifier(req) {
+  if (req?.admin?.email) return req.admin.email;
+  if (req?.admin?.username) return req.admin.username;
+  return 'system';
+}
+
+async function logModerationAction(action) {
+  try {
+    await ModerationAction.create(action);
+  } catch (err) {
+    // ignore logging errors
+  }
 }
 
 async function listUserPosts(req, res) {
@@ -114,6 +129,7 @@ async function listUserPosts(req, res) {
           user: {
             _id: '$user._id',
             name: '$user.name',
+            email: '$user.email',
             ublastManualBlocked: '$user.ublastManualBlocked',
             ublastBlockedUntil: '$user.ublastBlockedUntil',
             isBlocked: '$user.isBlocked',
@@ -148,6 +164,7 @@ async function listUserPosts(req, res) {
         id: post.user?._id,
         name: userName,
         avatar: post.profile?.profileImageUrl || '',
+        email: post.user?.email || '',
       },
       content: post.description || '',
       mediaType: post.mediaType,
@@ -173,6 +190,35 @@ async function listUserPosts(req, res) {
   });
 }
 
+async function deletePost(req, res) {
+  const { postId } = req.params;
+  if (!mongoose.isValidObjectId(postId)) {
+    return res.status(400).json({ error: 'Invalid post id.' });
+  }
+  const post = await Post.findById(postId).lean();
+  if (!post) {
+    return res.status(404).json({ error: 'Post not found.' });
+  }
+  const user = await User.findById(post.userId, { email: 1 }).lean();
+  const deleted = await Post.findByIdAndDelete(postId);
+  if (!deleted) {
+    return res.status(404).json({ error: 'Post not found.' });
+  }
+  await Promise.all([
+    Like.deleteMany({ postId }),
+    Comment.deleteMany({ postId }),
+  ]);
+  await logModerationAction({
+    type: 'delete_post',
+    targetType: 'post',
+    targetId: deleted._id,
+    targetEmail: user?.email || '',
+    performedBy: getAdminIdentifier(req),
+  });
+  return res.status(200).json({ deleted: true });
+}
+
 module.exports = {
   listUserPosts,
+  deletePost,
 };
