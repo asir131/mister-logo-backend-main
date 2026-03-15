@@ -7,38 +7,6 @@ Express.js backend with email OTP verification, JWT access tokens, and refresh t
 Create a `.env` file with:
 
 ```
-PORT=5000
-JWT_SECRET=safsdfgasefasfasfsaf
-JWT_EXPIRES_IN=1h
-MONGODB_URI=mongodb+srv://afaysal220:Faysal20122@blinkit.typzf.mongodb.net/mister
-CORS_ORIGINS=http://localhost:3000,http://localhost:5173
-
-EMAIL_HOST=smtp.gmail.com
-EMAIL_PORT=587
-EMAIL_USER=afaysal220@gmail.com
-EMAIL_PASS=npzp eabo veuk tnlr
-EMAIL_FROM=afaysal220@gmail.com
-
-CLOUDINARY_CLOUD_NAME=ddty8zoxr
-CLOUDINARY_API_KEY=148938264955972
-CLOUDINARY_API_SECRET=cmMy7WcbWPsDjw9ms1UPAaPMK9Y
-
-FACEBOOK_APP_ID=your_facebook_app_id
-FACEBOOK_APP_SECRET=your_facebook_app_secret
-FACEBOOK_CALLBACK_URL=http://localhost:5000/api/auth/facebook/callback
-
-ADMIN_API_KEY=your_admin_key_here
-ADMIN_EMAIL=admin@admin.com
-ADMIN_PASSWORD=1234
-ADMIN_JWT_EXPIRES_IN=12h
-UBLAST_SHARE_WINDOW_HOURS=48
-UBLAST_BLOCK_DAYS=90
-LATE_API_BASE_URL=https://getlate.dev/api/v1
-LATE_API_KEY=your_late_api_key
-LATE_WEBHOOK_SECRET=your_webhook_secret
-LATE_OAUTH_REDIRECT_URI=http://localhost:5000/api/accounts/late-callback
-LATE_PROFILE_ID=your_late_profile_id
-```
 
 Install and run:
 
